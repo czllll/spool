@@ -184,8 +184,8 @@ class RoutineState:
     fires: int = 0
     last_session: str | None = None
     last_fired_at: float | None = None
-    last_scheduled: Mapping[int, float] = MappingProxyType({})  # trigger index -> last handled scheduled time
-    files_seen: Mapping[str, str] = MappingProxyType({})        # "trigger:relpath" -> signature when it fired
+    last_scheduled: Mapping[int, float] = field(default_factory=lambda: MappingProxyType({}))  # trigger index -> last handled scheduled time
+    files_seen: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))        # "trigger:relpath" -> signature when it fired
     delivery_keys: frozenset[str] = frozenset()                   # webhook / manual fire keys (dedup of retries)
     fired: tuple[Mapping[str, Any], ...] = ()                     # recent ROUTINE_FIRED payloads (newest last)
 

@@ -93,8 +93,8 @@ class State:
     step: int = 0  # model responses so far
     plan_only_steps: int = 0  # model responses whose only tool calls were todo_write
     pending: tuple[ToolCall, ...] = ()
-    verdicts: Mapping[str, Mapping[str, Any]] = _EMPTY
-    approvals: Mapping[str, bool] = _EMPTY
+    verdicts: Mapping[str, Mapping[str, Any]] = field(default_factory=lambda: _EMPTY)
+    approvals: Mapping[str, bool] = field(default_factory=lambda: _EMPTY)
     awaiting: str | None = None
     awaiting_expires_at: float | None = None  # when the pending approval lapses (approval_ttl_s)
     expired_approvals: frozenset[str] = frozenset()
@@ -111,7 +111,7 @@ class State:
     todos: tuple[Mapping[str, Any], ...] = ()
     connectors_loaded: bool = False
     connector_tools: tuple[Mapping[str, Any], ...] = ()      # recorded tool entries (connectors.tool_entry)
-    connector_servers: Mapping[str, Mapping[str, Any]] = _EMPTY
+    connector_servers: Mapping[str, Mapping[str, Any]] = field(default_factory=lambda: _EMPTY)
     skills_loaded: bool = False
     skills: tuple[Mapping[str, Any], ...] = ()                   # name, description, files (skills.Skill.summary)
     memory_loaded: bool = False

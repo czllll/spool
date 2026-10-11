@@ -10,7 +10,7 @@ dependencies = ["httpx>=0.27"]
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40"]
 web = ["starlette>=0.37", "uvicorn>=0.30"]
-dev = ["pytest>=8", "starlette>=0.37", "uvicorn>=0.30"]
+dev = ["pytest>=8", "starlette>=0.37", "uvicorn>=0.30", "mcp>=2.3"]  # mcp: interop tests against the official SDK
 
 [project.scripts]
 spool = "spool.cli:main"
