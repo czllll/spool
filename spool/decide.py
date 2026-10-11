@@ -13,6 +13,11 @@ from dataclasses import dataclass
 
 from .state import State, ToolCall
 
+EXPIRED_REASON = (
+    "Nobody approved this action in time, so it was not run. Do not retry it. Finish your reply and say "
+    "which action is waiting for approval, so the user can run it later."
+)
+
 
 @dataclass(frozen=True)
 class Action:
@@ -62,6 +67,14 @@ class Finish(Action):
 @dataclass(frozen=True)
 class WaitForApproval(Action):
     call_id: str
+    expires_at: float | None = None
+
+
+@dataclass(frozen=True)
+class ExpireApproval(Action):
+    """Nobody decided within approval_ttl_s: record a denial so the call never runs late."""
+
+    call_id: str
 
 
 @dataclass(frozen=True)
@@ -84,7 +97,10 @@ def decide(state: State, now: float) -> Action:
     if state.status == "finished":
         return Done()
     if state.awaiting is not None:
-        return WaitForApproval(state.awaiting)
+        expires_at = state.awaiting_expires_at
+        if expires_at is not None and now >= expires_at:
+            return ExpireApproval(state.awaiting)
+        return WaitForApproval(state.awaiting, expires_at)
     if state.wake_at is not None:
         return Sleep(state.wake_at) if now < state.wake_at else Wake()
 
@@ -106,6 +122,8 @@ def decide(state: State, now: float) -> Action:
             if call.id not in state.approvals:
                 return RequestApproval(call, verdict.get("reason", ""))
             if not state.approvals[call.id]:
+                if call.id in state.expired_approvals:
+                    return CompleteWithoutRunning(call, "rejected", EXPIRED_REASON)
                 return CompleteWithoutRunning(call, "rejected", "The approver rejected this action.")
         return ExecuteTool(call)
 

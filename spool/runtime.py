@@ -36,6 +36,7 @@ from .decide import (
     CompleteWithoutRunning,
     Done,
     ExecuteTool,
+    ExpireApproval,
     Finish,
     RequestApproval,
     Sleep,
@@ -60,6 +61,10 @@ class SimulatedCrash(BaseException):
     """
 
 
+class ApprovalExpired(ValueError):
+    """The approval arrived after the request's deadline; the call was denied instead."""
+
+
 @dataclass
 class RunResult:
     session_id: str
@@ -73,6 +78,15 @@ class RunResult:
     @property
     def answer(self) -> str:
         return (self.state.final or {}).get("answer", "") if self.state.final else ""
+
+    @property
+    def due_at(self) -> float | None:
+        """When this session needs to run again without outside input (wake-up or approval deadline)."""
+        if self.status == "sleeping":
+            return self.state.wake_at
+        if self.status == "awaiting_approval":
+            return self.state.awaiting_expires_at
+        return None
 
 
 class _Handle:
@@ -171,7 +185,17 @@ class Runtime:
         h = self._open(session_id)
         if h.state.awaiting != call_id:
             raise ValueError(f"session {session_id} is not waiting for approval of {call_id!r} (waiting for {h.state.awaiting!r})")
+        expires_at = h.state.awaiting_expires_at
+        if expires_at is not None and self.clock() >= expires_at:
+            # Whoever observes the deadline first records it; a late "allow" must not run the call.
+            self._expire(h, call_id)
+            raise ApprovalExpired(f"the approval for {call_id!r} expired before it was decided; the action did not run")
         h.append(ev.APPROVAL_DECIDED, {"call_id": call_id, "approved": approved, "by": by, "note": note})
+
+    def _expire(self, h: "_Handle", call_id: str) -> None:
+        ttl = h.state.config.approval_ttl_s or 0
+        h.append(ev.APPROVAL_DECIDED, {"call_id": call_id, "approved": False, "by": "expired",
+                                       "note": f"not decided within {ttl:g}s"})
 
     def fork(self, session_id: str, at_seq: int, *, config: AgentConfig | None = None,
              copy_workspace: bool = True) -> str:
@@ -243,10 +267,16 @@ class Runtime:
             elif isinstance(action, Authorize):
                 self._authorize(h, action.call)
             elif isinstance(action, RequestApproval):
+                requested_at = self.clock()
+                ttl = h.state.config.approval_ttl_s
                 h.append(ev.APPROVAL_REQUESTED, {
                     "call_id": action.call.id, "tool": action.call.name,
                     "arguments": dict(action.call.args), "reason": action.reason,
+                    "rule": (h.state.verdicts.get(action.call.id) or {}).get("rule"),
+                    "requested_at": requested_at, "expires_at": requested_at + ttl if ttl else None,
                 })
+            elif isinstance(action, ExpireApproval):
+                self._expire(h, action.call_id)
             elif isinstance(action, CompleteWithoutRunning):
                 h.append(ev.TOOL_COMPLETED, {
                     "call_id": action.call.id, "name": action.call.name, "ok": False,

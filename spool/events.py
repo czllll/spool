@@ -1,9 +1,12 @@
-"""Event vocabulary of a session.
+"""Event vocabulary.
 
 A session is nothing but an ordered list of these events. The reducer
 (`spool.state.reduce`) folds them into control-flow state, the context engine
 renders them into model requests, and the eval harness reads metrics off them.
 Events are never updated or deleted.
+
+Routines (saved tasks with triggers) are streams of their own in the same
+store, named `routine:<name>`; `spool.routines` folds them the same way.
 """
 
 from __future__ import annotations
@@ -25,7 +28,7 @@ CONTEXT_COMPACTED = "context_compacted"  # older turns render as a model-written
 SESSION_FINISHED = "session_finished"    # terminal: completed / failed / max_steps / budget_exhausted / cancelled
 NOTE = "note"                            # bookkeeping: wake-ups, crash recovery, warnings
 
-ALL_TYPES = frozenset(
+SESSION_TYPES = frozenset(
     {
         SESSION_STARTED,
         USER_MESSAGE,
@@ -42,6 +45,22 @@ ALL_TYPES = frozenset(
         NOTE,
     }
 )
+
+# Routine streams
+ROUTINE_SAVED = "routine_saved"          # the full spec; a later save replaces it and re-arms the triggers
+ROUTINE_FIRED = "routine_fired"          # a trigger fired: fire key, scheduled time, payload, the session it starts
+ROUTINE_SKIPPED = "routine_skipped"      # a scheduled time passed without a run (overlap, missed while stopped)
+ROUTINE_PAUSED = "routine_paused"
+ROUTINE_RESUMED = "routine_resumed"
+ROUTINE_DELETED = "routine_deleted"
+
+ROUTINE_TYPES = frozenset(
+    {ROUTINE_SAVED, ROUTINE_FIRED, ROUTINE_SKIPPED, ROUTINE_PAUSED, ROUTINE_RESUMED, ROUTINE_DELETED}
+)
+
+ROUTINE_STREAM_PREFIX = "routine:"
+
+ALL_TYPES = SESSION_TYPES | ROUTINE_TYPES
 
 
 @dataclass(frozen=True)

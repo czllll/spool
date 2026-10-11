@@ -9,6 +9,10 @@ up exactly where the client left off.
 Runs happen in background asyncio tasks, one per session at a time. Approving
 an action, sending a follow-up, branching or resuming after a restart are all
 just "append an event, then run again".
+
+Unless the server is read-only it also runs the scheduler: every few seconds it
+fires due routines and resumes sessions whose wake-up time or approval deadline
+has passed, so routines keep running for as long as the server is up.
 """
 
 from __future__ import annotations
@@ -30,7 +34,8 @@ from starlette.staticfiles import StaticFiles
 from .. import events as ev
 from ..config import AgentConfig
 from ..events import Event
-from ..runtime import Runtime
+from ..routines import RoutineError, RoutineSpec, Scheduler, summarize_routine
+from ..runtime import ApprovalExpired, Runtime
 from ..state import replay
 from ..tools import PathError, relative_parts, resolve_path
 from ..util import truncate_middle
@@ -131,13 +136,16 @@ class SessionHub:
             "running": self.running(session_id),
             "error": self.errors.get(session_id),
             "awaiting": state.awaiting,
+            "awaiting_expires_at": state.awaiting_expires_at,
+            "wake_at": state.wake_at,
             "step": state.step,
             "usage": asdict(state.usage),
             "taint": sorted(state.taint),
             "workspace": state.workspace,
             "parent": dict(state.parent) if state.parent else None,
             "config": {"model": cfg.model, "sandbox": cfg.sandbox, "policy": cfg.policy, "approval": cfg.approval,
-                       "context_strategy": cfg.context_strategy, "max_steps": cfg.max_steps},
+                       "approval_ttl_s": cfg.approval_ttl_s, "context_strategy": cfg.context_strategy,
+                       "max_steps": cfg.max_steps},
             "steps": steps,
             "next_seq": state.next_seq,
         }
@@ -160,17 +168,72 @@ def _sse(kind: str, payload: dict[str, Any], event_id: int | None = None) -> str
     return f"{head}event: {kind}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, read_only: bool = False) -> Starlette:
-    """`read_only` serves the sessions for browsing (e.g. a run's recorded evals) and refuses every write."""
+def pending_approvals(store: Any) -> list[dict[str, Any]]:
+    """Every approval that is waiting for someone, across sessions, oldest first."""
+    out = []
+    for row in store.sessions(where="status = 'awaiting_approval'", limit=500):
+        events = store.load(row["id"])
+        state = replay(events)
+        if state.awaiting is None:
+            continue
+        request = next((e for e in reversed(events)
+                        if e.type == ev.APPROVAL_REQUESTED and e.data.get("call_id") == state.awaiting), None)
+        if request is None:
+            continue
+        parent = dict(state.parent) if state.parent else {}
+        out.append({
+            "session_id": row["id"], "task": state.task, "routine": parent.get("routine"),
+            "call_id": state.awaiting, "tool": request.data.get("tool"), "arguments": request.data.get("arguments"),
+            "rule": request.data.get("rule"), "reason": request.data.get("reason"),
+            "requested_at": request.data.get("requested_at", request.ts), "expires_at": request.data.get("expires_at"),
+            "seq": request.seq,
+        })
+    return sorted(out, key=lambda a: a["requested_at"] or 0)
+
+
+def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, read_only: bool = False,
+               tick_s: float | None = 10.0) -> Starlette:
+    """`read_only` serves the sessions for browsing (e.g. a run's recorded evals) and refuses every write.
+
+    `tick_s` is the scheduler period (None: no scheduler; routines then only run when fired by hand).
+    """
     hub = SessionHub(runtime)
     store = runtime.store
     base_config = default_config or AgentConfig()
+    scheduler = Scheduler(runtime, base_config=base_config)
+    scheduler_state: dict[str, Any] = {"last_tick": None, "error": None}
+
+    def tick_once() -> list[str]:
+        """Fire due routines and resume due sessions; returns the session ids started."""
+        started = []
+        for result in scheduler.tick():
+            if result.session_id and result.started:
+                started.append(result.session_id)
+        started += [sid for sid in store.due_sessions(runtime.clock()) if sid not in started]
+        for sid in started:
+            hub.start(sid)
+        scheduler_state["last_tick"] = runtime.clock()
+        return started
+
+    async def scheduler_loop() -> None:
+        # Routine runs that a previous server left mid-way continue from their logs; interactive
+        # sessions wait for someone to press Resume.
+        for row in store.sessions(where="status = 'running' AND id LIKE 'r-%'", limit=500):
+            hub.start(row["id"])
+        while True:
+            try:
+                tick_once()
+                scheduler_state["error"] = None
+            except Exception as exc:  # shown in the UI; the next tick tries again
+                scheduler_state["error"] = f"{type(exc).__name__}: {exc}"
+            await asyncio.sleep(tick_s or 10.0)
 
     async def index(request: Request) -> Response:
         return FileResponse(STATIC / "index.html")
 
     async def server_config(request: Request) -> Response:
-        return JSONResponse({"read_only": read_only, "model": base_config.model})
+        return JSONResponse({"read_only": read_only, "model": base_config.model,
+                             "scheduler": None if read_only or not tick_s else {"tick_s": tick_s, **scheduler_state}})
 
     def refuse_if_read_only() -> Response | None:
         if read_only:
@@ -285,10 +348,96 @@ def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, r
         try:
             runtime.approve(sid, body["call_id"], bool(body.get("approved")), by=body.get("by") or "web",
                             note=body.get("note") or "")
+        except ApprovalExpired as exc:
+            hub.start(sid)  # the expiry was recorded; let the agent finish its reply
+            return JSONResponse({"error": "This approval expired before you answered, so the step did not run.",
+                                 "detail": str(exc)}, status_code=409)
         except (KeyError, ValueError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=409)
         hub.start(sid)
         return JSONResponse(hub.summary(sid))
+
+    async def approvals(request: Request) -> Response:
+        return JSONResponse(pending_approvals(store))
+
+    async def tick(request: Request) -> Response:
+        """Run one scheduler pass now (the loop does this every tick_s)."""
+        if (refused := refuse_if_read_only()) is not None:
+            return refused
+        return JSONResponse({"started": tick_once()})
+
+    # ------------------------------------------------------------ routines
+    def routine_summary(name: str) -> dict[str, Any]:
+        state = scheduler.state(name)
+        if state.spec is None or state.deleted:
+            raise KeyError(name)
+        return summarize_routine(state, store, runtime.clock(), scheduler)
+
+    async def list_routines(request: Request) -> Response:
+        return JSONResponse([routine_summary(row["name"]) for row in store.routines()])
+
+    async def save_routine(request: Request) -> Response:
+        if (refused := refuse_if_read_only()) is not None:
+            return refused
+        body = await request.json()
+        try:
+            spec = RoutineSpec.from_dict(body)
+            existed = store.routine(spec.name) is not None and not store.routine(spec.name)["deleted"]
+            scheduler.save(spec)
+        except (RoutineError, TypeError, ValueError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(routine_summary(spec.name), status_code=200 if existed else 201)
+
+    async def get_routine(request: Request) -> Response:
+        try:
+            return JSONResponse(routine_summary(request.path_params["name"]))
+        except KeyError:
+            return JSONResponse({"error": "No such routine."}, status_code=404)
+
+    async def fire_routine(request: Request) -> Response:
+        """Webhook: the JSON body becomes {payload}; an Idempotency-Key header makes retries safe."""
+        if (refused := refuse_if_read_only()) is not None:
+            return refused
+        name = request.path_params["name"]
+        raw = await request.body()
+        try:
+            payload = json.loads(raw) if raw else None
+        except json.JSONDecodeError:
+            return JSONResponse({"error": "The body must be JSON."}, status_code=400)
+        return _fire(name, payload, request.headers.get("idempotency-key"), "webhook")
+
+    async def run_routine(request: Request) -> Response:
+        if (refused := refuse_if_read_only()) is not None:
+            return refused
+        return _fire(request.path_params["name"], None, None, "manual")
+
+    def _fire(name: str, payload: Any, key: str | None, kind: str) -> Response:
+        try:
+            result = scheduler.fire(name, payload=payload, key=key, kind=kind)
+        except KeyError:
+            return JSONResponse({"error": "No such routine."}, status_code=404)
+        except RoutineError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=409)
+        if result.skipped:
+            return JSONResponse({"error": f"Busy: {result.skipped}. Send it again later.", "retry": True},
+                                status_code=409, headers={"Retry-After": "60"})
+        if result.session_id and result.started:
+            hub.start(result.session_id)
+        return JSONResponse({"session_id": result.session_id, "deduplicated": result.deduplicated}, status_code=202)
+
+    def _edit(action: str):
+        async def handler(request: Request) -> Response:
+            if (refused := refuse_if_read_only()) is not None:
+                return refused
+            name = request.path_params["name"]
+            try:
+                getattr(scheduler, action)(name)
+            except KeyError:
+                return JSONResponse({"error": "No such routine."}, status_code=404)
+            if action == "delete":
+                return JSONResponse({"deleted": name})
+            return JSONResponse(routine_summary(name))
+        return handler
 
     async def post_resume(request: Request) -> Response:
         if (refused := refuse_if_read_only()) is not None:
@@ -360,7 +509,10 @@ def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, r
 
     @asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
+        loop_task = asyncio.create_task(scheduler_loop()) if tick_s and not read_only else None
         yield
+        if loop_task is not None:
+            loop_task.cancel()
         hub.close_streams()
         for sid in list(hub.tasks):
             await hub.stop(sid)
@@ -379,8 +531,19 @@ def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, r
         Route("/api/sessions/{sid}/stop", post_stop, methods=["POST"]),
         Route("/api/sessions/{sid}/fork", post_fork, methods=["POST"]),
         Route("/api/sessions/{sid}/files", files, methods=["GET"]),
+        Route("/api/approvals", approvals, methods=["GET"]),
+        Route("/api/tick", tick, methods=["POST"]),
+        Route("/api/routines", list_routines, methods=["GET"]),
+        Route("/api/routines", save_routine, methods=["POST"]),
+        Route("/api/routines/{name}", get_routine, methods=["GET"]),
+        Route("/api/routines/{name}", _edit("delete"), methods=["DELETE"]),
+        Route("/api/routines/{name}/fire", fire_routine, methods=["POST"]),
+        Route("/api/routines/{name}/run", run_routine, methods=["POST"]),
+        Route("/api/routines/{name}/pause", _edit("pause"), methods=["POST"]),
+        Route("/api/routines/{name}/resume", _edit("resume"), methods=["POST"]),
         Mount("/static", StaticFiles(directory=STATIC), name="static"),
     ]
     app = Starlette(routes=routes, lifespan=lifespan)
     app.state.hub = hub
+    app.state.scheduler = scheduler
     return app

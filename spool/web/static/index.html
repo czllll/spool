@@ -16,6 +16,11 @@
         <h1 class="brand">Spool</h1>
         <button class="btn btn-primary" id="new-task" type="button">New task</button>
       </div>
+      <nav class="rail-nav" aria-label="Views">
+        <a href="#/" id="nav-sessions">Sessions</a>
+        <a href="#/routines" id="nav-routines">Routines</a>
+        <a href="#/approvals" id="nav-approvals">Approvals <span class="count" id="approval-count" hidden></span></a>
+      </nav>
       <ul class="session-list" id="session-list"></ul>
     </aside>
 
@@ -32,6 +37,78 @@
       </section>
 
       <ol class="entries" id="entries" aria-live="polite"></ol>
+
+      <section class="page" id="page-routines" hidden aria-labelledby="routines-title">
+        <header class="page-head">
+          <h2 id="routines-title">Routines</h2>
+          <p>A routine starts a task on its own: on a schedule, when files arrive in its folder, or when another
+            program calls its webhook. Steps that need approval wait under Approvals; if nobody answers in time, the
+            step does not run.</p>
+        </header>
+        <ul class="routine-list" id="routine-list"></ul>
+
+        <form class="routine-form" id="routine-form" autocomplete="off">
+          <h3 id="routine-form-title">New routine</h3>
+          <div class="form-row">
+            <label>Name
+              <input id="r-name" type="text" required pattern="[a-z0-9][a-z0-9\-]{0,47}" placeholder="morning-inbox">
+            </label>
+            <label class="grow">Folder
+              <input id="r-workspace" type="text" placeholder="Optional; the routine gets its own folder otherwise">
+            </label>
+          </div>
+          <label class="block">Task
+            <textarea id="r-task" rows="3" required placeholder="Read the new files in inbox/ and add a one-line summary of each to summary.md."></textarea>
+            <span class="hint">You can use {date}, {time}, {files} (the new files) and {payload} (webhook body).</span>
+          </label>
+          <div class="form-row">
+            <label>Starts
+              <select id="r-when">
+                <option value="daily">Every day at</option>
+                <option value="weekdays">Weekdays at</option>
+                <option value="interval">Every few minutes</option>
+                <option value="cron">On a cron schedule</option>
+                <option value="none">Only when started</option>
+              </select>
+            </label>
+            <label id="r-time-wrap">Time <input id="r-time" type="time" value="09:00"></label>
+            <label id="r-every-wrap" hidden>Minutes <input id="r-every" type="number" min="1" value="60"></label>
+            <label id="r-cron-wrap" hidden>Cron <input id="r-cron" type="text" placeholder="0 9 * * 1-5"></label>
+          </div>
+          <div class="form-row">
+            <label class="grow">Also start when new files arrive in
+              <input id="r-watch" type="text" placeholder="Optional folder, e.g. inbox">
+            </label>
+            <label class="check"><input id="r-webhook" type="checkbox"> Can be started by a webhook</label>
+          </div>
+          <div class="form-row">
+            <label>Steps that need approval
+              <select id="r-approval">
+                <option value="human">Ask me</option>
+                <option value="auto_deny">Block them</option>
+                <option value="auto_approve">Allow them</option>
+              </select>
+            </label>
+            <label id="r-ttl-wrap">Skip the step if nobody answers within
+              <span class="inline"><input id="r-ttl" type="number" min="1" value="10"> minutes</span>
+            </label>
+          </div>
+          <div class="composer-actions">
+            <span class="composer-hint" id="routine-hint"></span>
+            <button class="btn" id="routine-cancel" type="button" hidden>Cancel</button>
+            <button class="btn btn-primary" type="submit" id="routine-save">Save routine</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="page" id="page-approvals" hidden aria-labelledby="approvals-title">
+        <header class="page-head">
+          <h2 id="approvals-title">Approvals</h2>
+          <p>Steps an agent stopped at until someone decides. Runs started by a routine skip the step if nobody
+            answers in time.</p>
+        </header>
+        <ul class="approval-list" id="approval-list"></ul>
+      </section>
 
       <form class="composer" id="composer" autocomplete="off">
         <label class="visually-hidden" for="composer-text">Task or message</label>

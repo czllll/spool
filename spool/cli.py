@@ -6,7 +6,10 @@
     spool approve SESSION CALL_ID [--deny]
     spool sessions | show SESSION | view SESSION -o file.html | verify SESSION
     spool fork SESSION --at SEQ [--set key=value ...] [--run]
-    spool tick                      resume every sleeping session whose wake-up time has passed
+    spool tick                      fire due routines, wake sleeping sessions, expire lapsed approvals; run them
+    spool daemon [--interval 15]    the same, forever, running sessions concurrently
+    spool routine add NAME --task T [--cron EXPR] [--every S] [--watch DIR] [--webhook] [config flags]
+    spool routine list | show NAME | fire NAME | pause NAME | resume NAME | rm NAME | apply FILE.toml
     spool eval --suite DIR [--config FILE] [--trials N] [--concurrency N] [--crash POINT,...]
     spool report RESULTS_DIR... [-o report.md]
     spool export RESULTS_DIR... -o data.jsonl [--all]
@@ -31,7 +34,6 @@ from .events import Event
 from .models import make_model
 from .replay import verify_render
 from .runtime import Runtime
-from .state import replay
 from .store import EventStore
 from .util import canonical_json, first_line, iso
 
@@ -44,8 +46,8 @@ def _parse_value(raw: str) -> Any:
         return raw
 
 
-def build_config(args: argparse.Namespace, base: AgentConfig | None = None) -> AgentConfig:
-    cfg = AgentConfig.from_toml(args.config) if getattr(args, "config", None) else (base or AgentConfig())
+def explicit_overrides(args: argparse.Namespace) -> dict[str, Any]:
+    """Only the config fields given on the command line (--set and the shorthand flags)."""
     changes: dict[str, Any] = {}
     for item in getattr(args, "set", None) or []:
         key, _, value = item.partition("=")
@@ -56,6 +58,12 @@ def build_config(args: argparse.Namespace, base: AgentConfig | None = None) -> A
             changes[flag] = value
     if getattr(args, "tools", None):
         changes["tools"] = tuple(t.strip() for t in args.tools.split(",") if t.strip())
+    return changes
+
+
+def build_config(args: argparse.Namespace, base: AgentConfig | None = None) -> AgentConfig:
+    cfg = AgentConfig.from_toml(args.config) if getattr(args, "config", None) else (base or AgentConfig())
+    changes = explicit_overrides(args)
     if changes:
         merged = cfg.to_dict()
         merged.update(changes)
@@ -252,20 +260,133 @@ def cmd_fork(args) -> int:
     return 0
 
 
+def _scheduler(args, store: EventStore):
+    from .models.scripted import ScriptedModel
+    from .routines import Scheduler
+
+    rt = Runtime(store, ScriptedModel([]), data_dir=args.data_dir)  # firing only starts sessions; no model needed
+    model = getattr(args, "model", None)
+    return Scheduler(rt, base_config=AgentConfig(model=model) if model else None)
+
+
+def due_work(store: EventStore, scheduler) -> tuple[list[str], list[str]]:
+    """(sessions started by routines that fired now, sessions whose wake-up or approval deadline passed)."""
+    fired = [r.session_id for r in scheduler.tick() if r.session_id and r.started]
+    due = [sid for sid in store.due_sessions(time.time()) if sid not in fired]
+    return fired, due
+
+
 def cmd_tick(args) -> int:
     store = _store(args)
-    now = time.time()
-    due = []
-    for row in store.sessions(where="status = 'sleeping'", limit=1000):
-        state = replay(store.load(row["id"]))
-        if state.wake_at is not None and state.wake_at <= now:
-            due.append(row["id"])
-    print(f"{len(due)} sleeping session(s) due")
+    fired, due = due_work(store, _scheduler(args, store))
+    print(f"{len(fired)} routine run(s) started, {len(due)} waiting session(s) due")
     code = 0
-    for sid in due:
+    for sid in fired + due:
         rt = _runtime(args, store, _session_model(store, sid, args.model))
         code = max(code, asyncio.run(_drive(rt, sid)))
     return code
+
+
+def cmd_daemon(args) -> int:
+    """Tick every --interval seconds and run what is due, several sessions at a time."""
+    store = _store(args)
+    scheduler = _scheduler(args, store)
+    rt = _runtime(args, store, args.model or "local")
+    running: dict[str, asyncio.Task] = {}
+
+    async def loop() -> None:
+        # Routine runs that a previous daemon left mid-way continue from their logs.
+        for row in store.sessions(where="status = 'running' AND id LIKE 'r-%'", limit=500):
+            running[row["id"]] = asyncio.create_task(rt.run(row["id"]))
+        print(f"spool daemon: ticking every {args.interval:g}s (model: {args.model or 'local'}, data: {args.data_dir})",
+              flush=True)
+        while True:
+            fired, due = due_work(store, scheduler)
+            for sid in fired + due:
+                if sid not in running or running[sid].done():
+                    running[sid] = asyncio.create_task(rt.run(sid))
+            for sid, task in list(running.items()):
+                if task.done():
+                    running.pop(sid)
+                    exc = task.exception()
+                    if exc is not None:
+                        print(f"  ✗ {sid}: {type(exc).__name__}: {exc}", flush=True)
+            await asyncio.sleep(args.interval)
+
+    try:
+        asyncio.run(loop())
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+# ----------------------------------------------------------------- routines
+def _routine_spec(args):
+    from .routines import RoutineSpec, Trigger
+
+    triggers = []
+    if args.cron:
+        triggers.append(Trigger("cron", cron=args.cron))
+    if args.every:
+        triggers.append(Trigger("interval", every_s=float(args.every)))
+    if args.watch:
+        triggers.append(Trigger("file", path=args.watch, pattern=args.pattern or "*"))
+    if args.webhook:
+        triggers.append(Trigger("webhook"))
+    return RoutineSpec(name=args.name, task=args.task, triggers=tuple(triggers), config=explicit_overrides(args),
+                       workspace=args.workspace, timezone=args.tz, overlap=args.overlap, misfire=args.misfire,
+                       approval_ttl_s=args.ttl)
+
+
+def _print_routine(summary: dict[str, Any]) -> None:
+    status = "on " if summary["enabled"] else "off"
+    nxt = iso(summary["next_at"]) if summary.get("next_at") else "-"
+    last = f"{summary['last_session']} ({summary['last_status']})" if summary.get("last_session") else "never run"
+    print(f"{summary['name']:<22} {status}  {', '.join(summary['triggers']) or 'manual only':<34} next {nxt}  last {last}")
+
+
+def cmd_routine(args) -> int:
+    from .routines import RoutineError, specs_from_toml, summarize_routine
+
+    store = _store(args)
+    scheduler = _scheduler(args, store)
+    now = time.time()
+    try:
+        if args.routine_command == "add":
+            state = scheduler.save(_routine_spec(args))
+            _print_routine(summarize_routine(state, store, now, scheduler))
+        elif args.routine_command == "apply":
+            with open(args.file, "rb") as fh:
+                specs = specs_from_toml(tomllib.load(fh))
+            for spec in specs:
+                _print_routine(summarize_routine(scheduler.save(spec), store, now, scheduler))
+        elif args.routine_command == "list":
+            rows = store.routines()
+            for row in rows:
+                _print_routine(summarize_routine(scheduler.state(row["name"]), store, now, scheduler))
+            if not rows:
+                print("no routines; add one with: spool routine add NAME --task '...' --cron '0 9 * * *'")
+        elif args.routine_command == "show":
+            for e in store.load(f"routine:{args.name}"):
+                print(f"{e.seq:>4} {iso(e.ts)} {e.type:<16} {_short({k: v for k, v in e.data.items() if k != 'spec'}, 140)}")
+        elif args.routine_command == "fire":
+            payload = json.loads(args.payload) if args.payload else None
+            result = scheduler.fire(args.name, payload=payload, key=args.key, kind="manual")
+            if not result.session_id:
+                print(f"not started: {result.skipped}")
+                return 1
+            print(f"started {result.session_id}" if result.started else f"already ran as {result.session_id}")
+            rt = _runtime(args, store, _session_model(store, result.session_id, args.model))
+            return asyncio.run(_drive(rt, result.session_id))
+        elif args.routine_command == "pause":
+            scheduler.pause(args.name)
+        elif args.routine_command == "resume":
+            scheduler.resume(args.name)
+        elif args.routine_command == "rm":
+            scheduler.delete(args.name)
+    except (RoutineError, KeyError) as exc:
+        raise SystemExit(str(exc).strip("'\""))
+    return 0
 
 
 def cmd_eval(args) -> int:
@@ -401,10 +522,46 @@ def main(argv: list[str] | None = None) -> int:
     _add_config_flags(p)
     p.set_defaults(func=cmd_fork)
 
-    p = sub.add_parser("tick", help="resume sleeping sessions that are due")
+    p = sub.add_parser("tick", help="fire due routines and run every session that is due (cron-friendly)")
     p.add_argument("--model")
     p.add_argument("--quiet", "-q", action="store_true")
     p.set_defaults(func=cmd_tick)
+
+    p = sub.add_parser("daemon", help="tick forever and run due sessions concurrently")
+    p.add_argument("--interval", type=float, default=15.0)
+    p.add_argument("--model")
+    p.add_argument("--quiet", "-q", action="store_true")
+    p.set_defaults(func=cmd_daemon)
+
+    p = sub.add_parser("routine", help="saved tasks that run on a schedule, on new files, or on a webhook")
+    rsub = p.add_subparsers(dest="routine_command", required=True)
+    r = rsub.add_parser("add", help="create or update a routine")
+    r.add_argument("name")
+    r.add_argument("--task", required=True, help="may use {date} {time} {now} {files} {payload}")
+    r.add_argument("--cron", help="e.g. '0 9 * * 1-5' (weekdays at 09:00)")
+    r.add_argument("--every", type=float, help="interval in seconds (>= 60)")
+    r.add_argument("--watch", help="folder in the routine workspace; new files start a run")
+    r.add_argument("--pattern", help="glob for --watch, e.g. '*.csv'")
+    r.add_argument("--webhook", action="store_true", help="allow POST /api/routines/NAME/fire")
+    r.add_argument("--tz", help="IANA time zone for --cron (default: this machine's)")
+    r.add_argument("--ttl", type=float, default=600.0, help="seconds before an unanswered approval expires")
+    r.add_argument("--overlap", choices=["skip", "allow"], default="skip")
+    r.add_argument("--misfire", choices=["run_once", "skip"], default="run_once")
+    r.add_argument("--workspace", help="default: <data-dir>/routines/NAME, kept across runs")
+    _add_config_flags(r)
+    r = rsub.add_parser("apply", help="create or update the [[routine]] tables of a TOML file")
+    r.add_argument("file")
+    rsub.add_parser("list", help="routines, their triggers and next run")
+    for name in ("show", "pause", "resume", "rm"):
+        r = rsub.add_parser(name)
+        r.add_argument("name")
+    r = rsub.add_parser("fire", help="run a routine now and follow it")
+    r.add_argument("name")
+    r.add_argument("--payload", help="JSON available to the task as {payload}")
+    r.add_argument("--key", help="delivery key; firing again with the same key does not run twice")
+    r.add_argument("--model")
+    r.add_argument("--quiet", "-q", action="store_true")
+    p.set_defaults(func=cmd_routine)
 
     p = sub.add_parser("eval", help="run an eval suite")
     p.add_argument("--suite", action="append", required=True)

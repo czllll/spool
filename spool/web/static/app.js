@@ -21,6 +21,8 @@ function el(tag, props = {}, ...children) {
 
 const S = {
   readOnly: false,
+  view: "sessions",
+  editing: null,
   current: null,
   stream: null,
   lastSeq: -1,
@@ -96,6 +98,82 @@ function lineCount(text) {
   return `${n} line${n === 1 ? "" : "s"}`;
 }
 
+function when(ts) {
+  if (!ts) return "";
+  return new Date(ts * 1000).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function clockTime(ts) {
+  return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+// Why a step needs approval, for a person (the policy's own reason is written for the model).
+function approvalWhy(rule, reason) {
+  if (rule === "rule_of_two") {
+    return "Together with what this run has already done, this step would read untrusted content, read protected "
+      + "data and send data out. That combination can leak data if the agent was misled by something it read.";
+  }
+  if (rule === "confirm") return "This step sends, buys or changes something outside the agent's folder.";
+  return reason || "The policy asks for a person to decide on this step.";
+}
+
+const RUN_LABELS = {
+  running: { text: "running", cls: "" }, awaiting_approval: { text: "waiting for approval", cls: "waiting" },
+  sleeping: { text: "sleeping", cls: "" }, completed: { text: "done", cls: "" }, failed: { text: "failed", cls: "failed" },
+  max_steps: { text: "stopped at the step limit", cls: "failed" }, budget_exhausted: { text: "stopped at the budget", cls: "failed" },
+  "not started": { text: "starting", cls: "" },
+};
+
+// ------------------------------------------------------------------ views
+const PAGES = { routines: "page-routines", approvals: "page-approvals" };
+
+function showView(view) {
+  S.view = view;
+  const sessions = view === "sessions";
+  for (const [name, id] of Object.entries(PAGES)) $(id).hidden = name !== view;
+  $("composer").hidden = !sessions || S.readOnly;
+  $("entries").hidden = !sessions;
+  if (!sessions) {
+    $("intro").hidden = true;
+    $("ledger-head").hidden = true;
+    $("panel-session").hidden = true;
+    $("panel-files").hidden = true;
+    if (S.stream) S.stream.close();
+    S.current = null;
+  }
+  $("nav-sessions").setAttribute("aria-current", sessions ? "page" : "false");
+  $("nav-routines").setAttribute("aria-current", view === "routines" ? "page" : "false");
+  $("nav-approvals").setAttribute("aria-current", view === "approvals" ? "page" : "false");
+}
+
+function route() {
+  const hash = location.hash;
+  const match = hash.match(/^#\/s\/(.+)$/);
+  if (match) {
+    if (!(S.view === "sessions" && S.current === match[1])) openSession(match[1]);
+  } else if (hash === "#/routines") {
+    showView("routines");
+    loadRoutines();
+    loadSessions();
+  } else if (hash === "#/approvals") {
+    showView("approvals");
+    loadApprovals();
+    loadSessions();
+  } else if (S.view !== "sessions" || S.current) {
+    showNewTask();
+  }
+}
+
+async function refreshApprovalCount() {
+  try {
+    const items = await api("/api/approvals");
+    const badge = $("approval-count");
+    badge.hidden = items.length === 0;
+    badge.textContent = String(items.length);
+    if (S.view === "approvals") renderApprovals(items);
+  } catch (_) { /* next poll */ }
+}
+
 // ------------------------------------------------------------------- rail
 async function loadSessions() {
   const rows = await api("/api/sessions");
@@ -165,6 +243,7 @@ async function submitComposer(event) {
 }
 
 function showNewTask() {
+  showView("sessions");
   if (S.readOnly) {
     $("intro").hidden = false;
     $("ledger-head").hidden = true;
@@ -174,7 +253,7 @@ function showNewTask() {
   if (S.stream) S.stream.close();
   S.current = null;
   S.summary = null;
-  location.hash = "";
+  if (location.hash && location.hash !== "#/") history.replaceState(null, "", "#/");
   $("ledger-head").hidden = true;
   $("intro").hidden = false;
   $("entries").replaceChildren();
@@ -187,10 +266,11 @@ function showNewTask() {
 
 // ----------------------------------------------------------------- session
 function openSession(id) {
+  showView("sessions");
   if (S.stream) S.stream.close();
   Object.assign(S, { current: id, lastSeq: -1, step: 0, summary: null, filesPath: ".", live: false });
   S.calls.clear();
-  location.hash = `#/s/${id}`;
+  if (location.hash !== `#/s/${id}`) history.pushState(null, "", `#/s/${id}`);
   $("intro").hidden = true;
   $("entries").replaceChildren();
   $("ledger-head").hidden = false;
@@ -275,6 +355,7 @@ const HANDLERS = {
     if (d.parent && d.parent.kind === "fork") {
       facts.append(fact("Branched from", `${d.parent.session_id} at event ${d.parent.seq}`));
     }
+    if (d.parent && d.parent.kind === "routine") facts.append(fact("Started by", `routine ${d.parent.routine}`));
   },
 
   user_message(ev, d) {
@@ -344,9 +425,8 @@ const HANDLERS = {
       }
     };
     const box = el("div", { class: "approval" },
-      el("p", { text: "Allow this step? Together with what this session has already done, it would read untrusted "
-        + "content, read protected data and send data out. That combination can leak data if the agent was misled "
-        + "by something it read." }),
+      el("p", { text: `Allow this step? ${approvalWhy(d.rule || "rule_of_two", d.reason)}` }),
+      d.expires_at ? el("p", { class: "note-line amber", text: `If nobody answers by ${clockTime(d.expires_at)}, it will not run.` }) : null,
       S.readOnly ? null : el("div", { class: "actions" },
         el("button", { class: "btn btn-primary", type: "button", text: "Allow", onclick: decide(true) }),
         el("button", { class: "btn btn-danger", type: "button", text: "Deny", onclick: decide(false) })));
@@ -359,7 +439,10 @@ const HANDLERS = {
     if (!call || !call.approval) return;
     call.approval.className = "approval decided";
     const who = d.by === "web" ? "You" : d.by;
-    call.approval.replaceChildren(el("p", { text: `${who} ${d.approved ? "allowed" : "denied"} this step.` }));
+    const text = d.by === "expired" ? "Nobody answered in time, so this step did not run."
+      : `${who} ${d.approved ? "allowed" : "denied"} this step.`;
+    call.approval.replaceChildren(el("p", { text }));
+    refreshApprovalCount();
     call.root.className = "call";
     call.state.textContent = d.approved ? "allowed" : "denied";
   },
@@ -492,7 +575,212 @@ async function loadFiles(path, keepView = false) {
   }
 }
 
+// ----------------------------------------------------------------- routines
+const CRON_DAILY = /^(\d{1,2}) (\d{1,2}) \* \* (\*|1-5)$/;
+
+async function loadRoutines() {
+  const list = $("routine-list");
+  let rows;
+  try {
+    rows = await api("/api/routines");
+  } catch (err) {
+    list.replaceChildren(el("li", { class: "empty-line", text: err.message }));
+    return;
+  }
+  list.replaceChildren();
+  if (!rows.length) list.append(el("li", { class: "empty-line", text: "No routines yet. Create one below." }));
+  for (const r of rows) list.append(routineItem(r));
+  $("routine-form").hidden = S.readOnly;
+}
+
+function routineItem(r) {
+  const spec = r.spec;
+  const approval = (spec.config || {}).approval || "human";
+  const approvalText = approval === "human"
+    ? `Asks you; skipped after ${Math.round((spec.approval_ttl_s || 600) / 60)} min` : approval === "auto_deny" ? "Blocked" : "Allowed";
+  const actions = S.readOnly ? null : el("span", { class: "actions" },
+    el("button", { class: "btn", type: "button", text: "Run now", onclick: () => runRoutine(r.name) }),
+    el("button", { class: "btn", type: "button", text: r.enabled ? "Pause" : "Resume",
+      onclick: () => routineAction(r.name, r.enabled ? "pause" : "resume") }),
+    el("button", { class: "btn", type: "button", text: "Edit", onclick: () => editRoutine(spec) }),
+    deleteButton(r.name));
+  const runs = el("ul", { class: "runs" }, ...r.runs.slice(0, 5).map((run) => {
+    const label = RUN_LABELS[run.status] || { text: run.status, cls: "" };
+    return el("li", {}, el("a", { href: `#/s/${run.session_id}`, text: run.session_id }),
+      el("span", { class: `st ${label.cls}`, text: label.text }), el("span", { class: "st", text: when(run.fired_at) }));
+  }));
+  return el("li", { class: `routine ${r.enabled ? "" : "off"}` },
+    el("div", { class: "routine-head" },
+      el("span", { class: "routine-name", text: r.name }),
+      el("span", { class: "routine-when", text: r.triggers.join(", ") || "Only when started" }),
+      actions),
+    el("p", { class: "routine-task", text: spec.task }),
+    el("div", { class: "routine-meta" },
+      el("span", { text: !r.enabled ? "Paused" : r.next_at ? `Next: ${when(r.next_at)}` : "No scheduled time" }),
+      el("span", { text: `Approvals: ${approvalText}` }),
+      el("span", { text: `Folder: ${r.workspace}` })),
+    r.runs.length ? runs : el("p", { class: "routine-meta", text: "Has not run yet." }));
+}
+
+function deleteButton(name) {
+  const button = el("button", { class: "btn btn-danger", type: "button", text: "Delete" });
+  let armed = null;
+  button.addEventListener("click", async () => {
+    if (!armed) {  // two clicks, no modal dialog
+      button.textContent = "Click again to delete";
+      armed = setTimeout(() => { button.textContent = "Delete"; armed = null; }, 3000);
+      return;
+    }
+    clearTimeout(armed);
+    await api(`/api/routines/${name}`, { method: "DELETE" }).catch((err) => ($("routine-hint").textContent = err.message));
+    loadRoutines();
+  });
+  return button;
+}
+
+async function runRoutine(name) {
+  try {
+    const started = await api(`/api/routines/${name}/run`, { method: "POST", body: {} });
+    if (started.session_id) location.hash = `#/s/${started.session_id}`;
+  } catch (err) {
+    $("routine-hint").textContent = err.message;
+  }
+}
+
+async function routineAction(name, action) {
+  await api(`/api/routines/${name}/${action}`, { method: "POST", body: {} }).catch((err) => ($("routine-hint").textContent = err.message));
+  loadRoutines();
+}
+
+function setWhenFields() {
+  const mode = $("r-when").value;
+  $("r-time-wrap").hidden = !(mode === "daily" || mode === "weekdays");
+  $("r-every-wrap").hidden = mode !== "interval";
+  $("r-cron-wrap").hidden = mode !== "cron";
+  $("r-ttl-wrap").hidden = $("r-approval").value !== "human";
+}
+
+function resetRoutineForm() {
+  S.editing = null;
+  $("routine-form").reset();
+  $("r-name").readOnly = false;
+  $("routine-form-title").textContent = "New routine";
+  $("routine-cancel").hidden = true;
+  $("routine-hint").textContent = "";
+  setWhenFields();
+}
+
+function editRoutine(spec) {
+  S.editing = spec.name;
+  $("routine-form-title").textContent = `Edit ${spec.name}`;
+  $("r-name").value = spec.name;
+  $("r-name").readOnly = true;
+  $("r-task").value = spec.task;
+  $("r-workspace").value = spec.workspace || "";
+  $("r-approval").value = (spec.config || {}).approval || "human";
+  $("r-ttl").value = Math.round((spec.approval_ttl_s || 600) / 60);
+  const time = spec.triggers.find((t) => t.kind === "cron" || t.kind === "interval");
+  $("r-when").value = "none";
+  if (time && time.kind === "interval") {
+    $("r-when").value = "interval";
+    $("r-every").value = Math.round(time.every_s / 60);
+  } else if (time) {
+    const m = time.cron.match(CRON_DAILY);
+    if (m) {
+      $("r-when").value = m[3] === "1-5" ? "weekdays" : "daily";
+      $("r-time").value = `${m[2].padStart(2, "0")}:${m[1].padStart(2, "0")}`;
+    } else {
+      $("r-when").value = "cron";
+      $("r-cron").value = time.cron;
+    }
+  }
+  const watch = spec.triggers.find((t) => t.kind === "file");
+  $("r-watch").value = watch ? watch.path : "";
+  $("r-webhook").checked = spec.triggers.some((t) => t.kind === "webhook");
+  $("routine-cancel").hidden = false;
+  setWhenFields();
+  $("r-task").focus();
+}
+
+async function saveRoutine(event) {
+  event.preventDefault();
+  const triggers = [];
+  const mode = $("r-when").value;
+  const [h, m] = ($("r-time").value || "09:00").split(":").map(Number);
+  if (mode === "daily") triggers.push({ kind: "cron", cron: `${m} ${h} * * *` });
+  if (mode === "weekdays") triggers.push({ kind: "cron", cron: `${m} ${h} * * 1-5` });
+  if (mode === "interval") triggers.push({ kind: "interval", every_s: Math.max(1, Number($("r-every").value)) * 60 });
+  if (mode === "cron") triggers.push({ kind: "cron", cron: $("r-cron").value.trim() });
+  const watch = $("r-watch").value.trim().replace(/\/+$/, "");
+  if (watch) triggers.push({ kind: "file", path: watch });
+  if ($("r-webhook").checked) triggers.push({ kind: "webhook" });
+  const spec = {
+    name: $("r-name").value.trim(),
+    task: $("r-task").value.trim(),
+    triggers,
+    workspace: $("r-workspace").value.trim() || null,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    config: { approval: $("r-approval").value },
+    approval_ttl_s: Math.max(1, Number($("r-ttl").value)) * 60,
+  };
+  try {
+    await api("/api/routines", { method: "POST", body: spec });
+    resetRoutineForm();
+    $("routine-hint").textContent = `Saved ${spec.name}.`;
+    loadRoutines();
+  } catch (err) {
+    $("routine-hint").textContent = err.message;
+  }
+}
+
+// ---------------------------------------------------------------- approvals
+async function loadApprovals() {
+  try {
+    renderApprovals(await api("/api/approvals"));
+  } catch (err) {
+    $("approval-list").replaceChildren(el("li", { class: "empty-line", text: err.message }));
+  }
+}
+
+function renderApprovals(items) {
+  const list = $("approval-list");
+  list.replaceChildren();
+  if (!items.length) list.append(el("li", { class: "empty-line", text: "Nothing is waiting for you." }));
+  for (const a of items) {
+    const item = el("li", { class: "approval-item" });
+    const decide = (approved) => async () => {
+      item.querySelectorAll("button").forEach((b) => (b.disabled = true));
+      try {
+        await api(`/api/sessions/${a.session_id}/approvals`, { method: "POST", body: { call_id: a.call_id, approved } });
+      } catch (err) {
+        item.append(el("p", { class: "note-line red", text: err.message }));
+      }
+      setTimeout(refreshApprovalCount, 300);
+    };
+    item.append(
+      el("div", { class: "call-head" }, el("span", { class: "call-name", text: a.tool }),
+        el("span", { class: "call-args", text: shortArgs(a.arguments) })),
+      el("pre", { text: JSON.stringify(a.arguments, null, 2) }),
+      el("p", { class: "why", text: approvalWhy(a.rule, a.reason) }),
+      el("div", { class: "from" },
+        el("span", { text: a.routine ? `From routine ${a.routine}` : "From a session" }),
+        el("a", { href: `#/s/${a.session_id}`, text: "Open the run" }),
+        el("span", { text: `Asked ${when(a.requested_at)}` }),
+        a.expires_at ? el("span", { class: "expiry", text: `Skipped at ${clockTime(a.expires_at)} if nobody answers` }) : null),
+      S.readOnly ? null : el("div", { class: "actions" },
+        el("button", { class: "btn btn-primary", type: "button", text: "Allow", onclick: decide(true) }),
+        el("button", { class: "btn btn-danger", type: "button", text: "Deny", onclick: decide(false) })));
+    list.append(item);
+  }
+}
+
 // ---------------------------------------------------------------------- boot
+$("routine-form").addEventListener("submit", saveRoutine);
+$("routine-cancel").addEventListener("click", resetRoutineForm);
+$("r-when").addEventListener("change", setWhenFields);
+$("r-approval").addEventListener("change", setWhenFields);
+window.addEventListener("hashchange", route);
+window.addEventListener("popstate", route);
 $("composer").addEventListener("submit", submitComposer);
 $("composer-text").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("composer").requestSubmit();
@@ -514,9 +802,10 @@ $("resume").addEventListener("click", async () => {
     $("intro").querySelector("h2").textContent = "Recorded sessions";
     $("intro").querySelector("p").textContent = "This server is read-only. Pick a session on the left to replay it step by step.";
   }
-  const rows = await loadSessions();
-  const match = location.hash.match(/^#\/s\/(.+)$/);
-  if (match) openSession(match[1]);
-  else if (!rows.length) showNewTask();
+  await loadSessions();
+  setWhenFields();
+  if (location.hash.startsWith("#/s/") || location.hash === "#/routines" || location.hash === "#/approvals") route();
   else showNewTask();
+  refreshApprovalCount();
+  setInterval(refreshApprovalCount, 10000);
 })();

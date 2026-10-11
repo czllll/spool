@@ -96,6 +96,8 @@ class State:
     verdicts: Mapping[str, Mapping[str, Any]] = _EMPTY
     approvals: Mapping[str, bool] = _EMPTY
     awaiting: str | None = None
+    awaiting_expires_at: float | None = None  # when the pending approval lapses (approval_ttl_s)
+    expired_approvals: frozenset[str] = frozenset()
     in_flight: str | None = None
     taint: frozenset[str] = frozenset()
     usage: Usage = field(default_factory=Usage)
@@ -173,13 +175,18 @@ def reduce(state: State, event: Event) -> State:
         return dataclasses.replace(s, verdicts=_with(s.verdicts, d["call_id"], dict(d)))
 
     if t == ev.APPROVAL_REQUESTED:
-        return dataclasses.replace(s, awaiting=d["call_id"], status="awaiting_approval")
+        return dataclasses.replace(s, awaiting=d["call_id"], awaiting_expires_at=d.get("expires_at"),
+                                   status="awaiting_approval")
 
     if t == ev.APPROVAL_DECIDED:
+        expired = s.expired_approvals | {d["call_id"]} if d.get("by") == "expired" else s.expired_approvals
+        clears = s.awaiting == d["call_id"]
         return dataclasses.replace(
             s,
             approvals=_with(s.approvals, d["call_id"], bool(d.get("approved"))),
-            awaiting=None if s.awaiting == d["call_id"] else s.awaiting,
+            awaiting=None if clears else s.awaiting,
+            awaiting_expires_at=None if clears else s.awaiting_expires_at,
+            expired_approvals=expired,
             status="running",
         )
 

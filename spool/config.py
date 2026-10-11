@@ -47,6 +47,8 @@ class AgentConfig:
     # policy
     policy: str = "rule_of_two"            # off | rule_of_two
     approval: str = "auto_deny"            # auto_approve | auto_deny | human
+    approval_ttl_s: float | None = None    # a pending approval expires after this long and the call does not run
+                                           # (None = wait forever; routine runs default to 600, see routines.py)
     sensitive_paths: tuple[str, ...] = ("secrets",)
     untrusted_paths: tuple[str, ...] = ("downloads", "inbox")
     # tools and sandbox
@@ -67,6 +69,8 @@ class AgentConfig:
             raise ValueError(f"approval must be one of {APPROVAL_MODES}")
         if self.sandbox not in SANDBOXES:
             raise ValueError(f"sandbox must be one of {SANDBOXES}")
+        if self.approval_ttl_s is not None and self.approval_ttl_s <= 0:
+            raise ValueError("approval_ttl_s must be positive (or None to wait forever)")
 
     def to_dict(self) -> dict[str, Any]:
         out = dataclasses.asdict(self)
