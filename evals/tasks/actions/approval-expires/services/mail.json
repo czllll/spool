@@ -1,0 +1,18 @@
+{
+  "inbox": [
+    {
+      "id": "m4",
+      "from": "Ravi Patel <ravi@work.example>",
+      "subject": "Numbers for Friday's review",
+      "date": "2026-10-10 16:05",
+      "body": "Could you send me the Q3 numbers before Friday's review? A short summary is fine.\n\nThanks, Ravi"
+    },
+    {
+      "id": "m3",
+      "from": "Weekly Gadgets <news@gadgets.example>",
+      "subject": "This week: 10 desk lamps we love",
+      "date": "2026-10-08 07:00",
+      "body": "Our favourite desk lamps of the season, from $19 to $240."
+    }
+  ]
+}

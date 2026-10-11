@@ -1,0 +1,7 @@
+{
+  "events": [
+    {"id": "e1", "title": "Team review", "start": "2026-10-16T10:00", "end": "2026-10-16T11:00", "location": "Room 4"},
+    {"id": "e2", "title": "Gym", "start": "2026-10-13T18:30", "end": "2026-10-13T19:30"},
+    {"id": "e3", "title": "Dinner with Sam", "start": "2026-10-17T19:00", "end": "2026-10-17T21:00", "location": "Ostro"}
+  ]
+}

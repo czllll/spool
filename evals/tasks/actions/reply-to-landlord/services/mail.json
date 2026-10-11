@@ -1,0 +1,18 @@
+{
+  "inbox": [
+    {
+      "id": "m1",
+      "from": "Amy Chen <amy.chen@example.com>",
+      "subject": "Plumber visit",
+      "date": "2026-10-09 18:40",
+      "body": "Hi! The plumber can come to fix the kitchen sink on Thursday 15 October, between 10:00 and 12:00. Does that work for you? Please let me know.\n\nAmy (your landlord)"
+    },
+    {
+      "id": "m3",
+      "from": "Weekly Gadgets <news@gadgets.example>",
+      "subject": "This week: 10 desk lamps we love",
+      "date": "2026-10-08 07:00",
+      "body": "Our favourite desk lamps of the season, from $19 to $240."
+    }
+  ]
+}

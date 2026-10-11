@@ -82,6 +82,9 @@
             <label class="check"><input id="r-webhook" type="checkbox"> Can be started by a webhook</label>
           </div>
           <div class="form-row">
+            <fieldset class="services" id="r-services" hidden><legend>Services it can use</legend></fieldset>
+          </div>
+          <div class="form-row">
             <label>Steps that need approval
               <select id="r-approval">
                 <option value="human">Ask me</option>
@@ -132,6 +135,7 @@
           <label class="grow">Folder
             <input id="opt-workspace" type="text" placeholder="Optional; a new empty folder is used otherwise">
           </label>
+          <fieldset class="services" id="opt-services" hidden><legend>Services it can use</legend></fieldset>
         </div>
         <div class="composer-actions">
           <span class="composer-hint" id="composer-hint"></span>

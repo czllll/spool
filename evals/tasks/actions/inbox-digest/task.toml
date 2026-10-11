@@ -1,0 +1,7 @@
+prompt = "Write digest.md with one line per unread email in my inbox (sender and subject). Then mark those emails as read."
+connectors = ["mail"]
+tools = ["todo_write", "write_file", "read_file"]
+max_steps = 12
+tags = ["mail", "files"]
+[approver]
+default = "approve"

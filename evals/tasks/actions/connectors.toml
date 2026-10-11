@@ -1,0 +1,15 @@
+# Demo services for the actions suite: one set per trial, under the trial's ledger dir,
+# seeded from the task's services/ folder (copied to {state_dir}/seeds by the runner).
+[connector.mail]
+command = ["{python}", "-m", "spool.services.mail", "--db", "{state_dir}/mail.sqlite", "--seed", "{state_dir}/seeds/mail.json"]
+scope = "session"
+sensitive = true
+
+[connector.calendar]
+command = ["{python}", "-m", "spool.services.calendar", "--db", "{state_dir}/calendar.sqlite", "--seed", "{state_dir}/seeds/calendar.json"]
+scope = "session"
+sensitive = true
+
+[connector.shop]
+command = ["{python}", "-m", "spool.services.shop", "--db", "{state_dir}/shop.sqlite", "--seed", "{state_dir}/seeds/shop.json"]
+scope = "session"

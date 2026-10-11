@@ -7,6 +7,11 @@ Crash mode: the session is driven by `spool resume` subprocesses. The first one
 runs with SPOOL_CRASH_AT and is SIGKILLed at that point; later ones resume from
 the log until the session finishes. This exercises real process death, not a
 simulated exception.
+
+Tasks with connectors get their own demo services per trial (seeded from the
+task's services/ folder), a simulated user who answers approval requests as the
+task says (approve, deny, or ignore them until they expire), and an audit of
+the services' records against the log after the trial (spool.services.audit).
 """
 
 from __future__ import annotations
@@ -25,12 +30,15 @@ from typing import Any, Callable
 
 from .. import events as ev
 from ..config import AgentConfig
+from ..connectors import ConnectorManager
 from ..context import prefix_breaks
 from ..models import make_model
 from ..models.base import ModelClient, PinnedModel
 from ..replay import verify_render
+from ..models.scripted import ScriptedModel
 from ..runtime import Runtime
-from ..state import replay
+from ..services.audit import audit
+from ..state import State, replay
 from ..store import EventStore
 from ..tools.ledger import Ledger
 from .metrics import summarize
@@ -132,19 +140,26 @@ async def run_trial(task: Task, trial: int, spec: EvalSpec, store: EventStore, m
         overrides["max_steps"] = task.max_steps
     if task.tools is not None:
         overrides["tools"] = task.tools
+    if task.connectors:
+        overrides["connectors"] = task.connectors
     cfg = spec.config.replace(**overrides)
 
-    rt = Runtime(store, model, data_dir=out, crash_hook=None)
+    connectors_file = task.connectors_file if task.connectors else None
+    manager = ConnectorManager.from_file(connectors_file, data_dir=out)
+    rt = Runtime(store, model, data_dir=out, crash_hook=None, connectors=manager)
     sid = rt.start(task.prompt, config=cfg, workspace=ws, fixtures=task.fixtures())
+    ledger_dir = rt.ledger_dir(sid)
+    if (task.dir / "services").is_dir():  # each trial gets fresh services, seeded from the task
+        shutil.copytree(task.dir / "services", ledger_dir / "seeds", dirs_exist_ok=True)
     started = time.perf_counter()
     harness_error = None
     crashes = resumes = 0
     status = "unknown"
     try:
         if crash:
-            crashes, resumes, status = await _drive_with_crashes(sid, crash, spec, store, task.timeout_s, slot)
+            crashes, resumes, status = await _drive_with_crashes(sid, crash, spec, store, task, slot, connectors_file)
         else:
-            result = await asyncio.wait_for(rt.run(sid), timeout=task.timeout_s)
+            result = await asyncio.wait_for(_drive(rt, sid, task), timeout=task.timeout_s)
             status = result.final_status or result.status
     except asyncio.TimeoutError:
         status = "timeout"
@@ -153,11 +168,15 @@ async def run_trial(task: Task, trial: int, spec: EvalSpec, store: EventStore, m
         status = "harness_error"
     finally:
         await rt.aclose()
+        if manager is not None:
+            await manager.aclose()
     wall_ms = (time.perf_counter() - started) * 1000
 
-    ledger_dir = rt.ledger_dir(sid)
     passed, verify_out = await _verify(task, ws, ledger_dir)
     record = session_metrics(store, sid)
+    if task.connectors:
+        family = [e for row_id in [sid, *_children(store, sid)] for e in store.load(row_id)]
+        record["audit"] = audit(ledger_dir, family)
     outbox = Ledger(ledger_dir / "outbox.jsonl").entries()
     net = Ledger(ledger_dir / "net.jsonl").entries()
     if record.get("status"):
@@ -200,24 +219,74 @@ async def _verify(task: Task, ws: Path, ledger_dir: Path) -> tuple[bool, str]:
     return proc.returncode == 0, text[:500]
 
 
-async def _drive_with_crashes(sid: str, crash: str, spec: EvalSpec, store: EventStore,
-                              timeout: float, slot: int | None = None) -> tuple[int, int, str]:
-    base = [sys.executable, "-m", "spool.cli", "--db", str(spec.out_dir / "spool.db"),
-            "--data-dir", str(spec.out_dir), "resume", sid, "--model", spec.model_spec, "--quiet"]
-    deadline = time.monotonic() + timeout
+APPROVER = "eval-approver"
+MAX_APPROVALS = 20
+
+
+async def _drive(rt: Runtime, sid: str, task: Task):
+    """Run the session, answering approval requests the way the task's simulated user does."""
+    result = await rt.run(sid)
+    for _ in range(MAX_APPROVALS):
+        if result.status != "awaiting_approval":
+            break
+        if not await _answer(rt, sid, result.state, task):
+            break  # "ignore" without a deadline would wait forever: leave it waiting
+        result = await rt.run(sid)
+    return result
+
+
+async def _answer(rt: Runtime, sid: str, state: State, task: Task) -> bool:
+    call = state.pending_call(state.awaiting or "")
+    mode = task.approval(call.name if call else "")
+    if mode == "ignore":
+        if state.awaiting_expires_at is None:
+            return False
+        await asyncio.sleep(max(0.0, state.awaiting_expires_at - time.time()) + 0.25)
+        return True  # the next run records the expiry
+    rt.approve(sid, state.awaiting or "", mode == "approve", by=APPROVER)
+    return True
+
+
+async def _drive_with_crashes(sid: str, crash: str, spec: EvalSpec, store: EventStore, task: Task,
+                              slot: int | None = None, connectors_file: Path | None = None) -> tuple[int, int, str]:
+    base = [sys.executable, "-m", "spool.cli", "--db", str(spec.out_dir / "spool.db"), "--data-dir", str(spec.out_dir)]
+    if connectors_file is not None:
+        base += ["--connectors", str(connectors_file)]
+    base += ["resume", sid, "--model", spec.model_spec, "--quiet"]
+    deadline = time.monotonic() + task.timeout_s
     crashes = resumes = 0
-    env = dict(os.environ, SPOOL_CRASH_AT=crash)
+    env = dict(os.environ)
     if slot is not None:
         env["SPOOL_SLOT"] = str(slot)
-    rc = await _run_proc(base, env, deadline)
-    if rc == -9:
-        crashes += 1
-    env.pop("SPOOL_CRASH_AT", None)
-    while rc != 0 and time.monotonic() < deadline and resumes < 3:
-        resumes += 1
-        rc = await _run_proc(base, env, deadline)
+
+    async def go() -> int:
+        nonlocal crashes
+        # The crash point stays armed until it fires: it may lie behind an approval.
+        rc = await _run_proc(base, {**env, "SPOOL_CRASH_AT": crash} if not crashes else env, deadline)
+        crashes += rc == -9
+        return rc
+
+    rc = await go()
+    for _ in range(MAX_APPROVALS + 4):
+        if time.monotonic() >= deadline:
+            break
+        status = (store.session(sid) or {}).get("status")
+        if status == "awaiting_approval":
+            # Approving needs no model: answer in this process, then let a fresh one continue.
+            approver = Runtime(store, ScriptedModel([]), data_dir=spec.out_dir)
+            if not await _answer(approver, sid, approver.state(sid), task):
+                break
+        elif rc == 0 or status not in ("running", "sleeping") or resumes >= 3:
+            break  # finished (whatever the exit code), or out of resumes
+        else:
+            resumes += 1
+        rc = await go()
     status = (store.session(sid) or {}).get("status", "unknown")
     return crashes, resumes, status
+
+
+def _children(store: EventStore, sid: str) -> list[str]:
+    return [row["id"] for row in store.sessions(where="id LIKE ?", args=(f"{sid}.%",), limit=1000)]
 
 
 async def _run_proc(argv: list[str], env: dict[str, str], deadline: float) -> int:

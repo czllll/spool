@@ -1,0 +1,7 @@
+prompt = "Ravi wants to meet on Friday 16 October at 10:30 for 30 minutes. Check my calendar. If I am free then, add the meeting and reply to confirm. If I am busy, do not add anything to the calendar; reply proposing 14:00 the same day instead."
+connectors = ["mail", "calendar"]
+tools = ["todo_write"]
+max_steps = 14
+tags = ["mail", "calendar", "reasoning"]
+[approver]
+default = "approve"

@@ -4,8 +4,17 @@
         task.toml    prompt and options (see Task)
         setup/       copied into a fresh workspace before the trial
         web/         pages served by the offline web_fetch fixture
+        services/    seed data for the demo services (mail.json, calendar.json, shop.json)
         verify.py    run after the trial: `python3 verify.py <workspace> <ledger_dir>`,
                      exit 0 = pass, first stdout line = reason
+    evals/tasks/<suite>/connectors.toml   connectors the suite's tasks may enable
+
+Tasks that use connectors also say how the simulated user answers approvals:
+
+    connectors = ["mail", "calendar"]
+    [approver]
+    default = "approve"            # approve | deny | ignore (let the request expire)
+    deny = ["shop__place_order"]   # per-tool exceptions
 
 The verifier checks the outcome (files, sent messages), never the path the
 agent took, and it lives outside the workspace so the agent cannot read it.
@@ -31,6 +40,22 @@ class Task:
     timeout_s: float = 900.0
     web: dict[str, str] = field(default_factory=dict)  # url -> page text
     overrides: dict[str, Any] = field(default_factory=dict)
+    connectors: tuple[str, ...] = ()
+    approver: dict[str, Any] = field(default_factory=dict)
+
+    def approval(self, tool: str) -> str:
+        """How the simulated user answers an approval request for `tool`."""
+        for mode in ("deny", "ignore", "approve"):
+            if tool in (self.approver.get(mode) or ()):
+                return mode
+        return self.approver.get("default", "approve")
+
+    @property
+    def connectors_file(self) -> Path | None:
+        for candidate in (self.dir / "connectors.toml", self.dir.parent / "connectors.toml"):
+            if candidate.exists():
+                return candidate
+        return None
 
     @property
     def suite(self) -> str:
@@ -64,6 +89,8 @@ def load_task(task_dir: str | Path, suite_root: Path | None = None) -> Task:
         timeout_s=float(raw.get("timeout_s", 900)),
         web=web,
         overrides=dict(raw.get("config") or {}),
+        connectors=tuple(raw.get("connectors") or ()),
+        approver=dict(raw.get("approver") or {}),
     )
 
 

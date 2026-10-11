@@ -266,6 +266,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: 0.25rem 0.4rem; color: var(--ink);
 }
 .composer-actions { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.6rem; max-width: 51rem; }
+.services { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; align-items: center; }
+.services legend { padding: 0; margin-bottom: 0.2rem; width: 100%; }
+.services label { display: flex; flex-direction: row; align-items: center; gap: 0.3rem; color: var(--ink); font: 0.85rem var(--mono); }
 .composer-hint { flex: 1; font-size: 0.85rem; color: var(--muted); }
 .composer-hint.red { color: var(--red); }
 

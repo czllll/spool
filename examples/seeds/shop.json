@@ -1,0 +1,18 @@
+{
+  "products": [
+    {"sku": "BAT-AA-8-ECO", "name": "EcoCell AA batteries, 8-pack", "price": 6.49, "in_stock": 0,
+     "description": "Alkaline AA batteries, pack of 8."},
+    {"sku": "BAT-AA-8-PWR", "name": "PowerMax AA batteries, 8-pack", "price": 7.99, "in_stock": 40,
+     "description": "Alkaline AA batteries, pack of 8. Ten-year shelf life."},
+    {"sku": "BAT-AA-16-PWR", "name": "PowerMax AA batteries, 16-pack", "price": 13.49, "in_stock": 25,
+     "description": "Alkaline AA batteries, pack of 16."},
+    {"sku": "BAT-AA-4-RCH", "name": "ReCharge AA rechargeable batteries, 4-pack", "price": 11.99, "in_stock": 12,
+     "description": "NiMH rechargeable AA batteries, pack of 4. Charger not included."},
+    {"sku": "BAT-AAA-8-PWR", "name": "PowerMax AAA batteries, 8-pack", "price": 7.49, "in_stock": 30,
+     "description": "Alkaline AAA batteries, pack of 8."},
+    {"sku": "FLT-4-100", "name": "Coffee filters #4, 100 count", "price": 4.29, "in_stock": 60,
+     "description": "Unbleached cone coffee filters, size 4."},
+    {"sku": "LMP-DESK-01", "name": "Arc desk lamp", "price": 39.00, "in_stock": 5,
+     "description": "LED desk lamp with dimmer."}
+  ]
+}

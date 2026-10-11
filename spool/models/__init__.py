@@ -9,6 +9,8 @@
   openrouter:<model>         OPENROUTER_API_KEY
   compat:<model>@<base_url>  any OpenAI-compatible server, SPOOL_API_KEY
   anthropic:<model>          Messages API via the official SDK (ANTHROPIC_API_KEY or an `ant` profile)
+  script:<file.json>         a scripted agent for tests and demos: the k-th assistant turn of every
+                             session is the k-th item, [{"content": "...", "tool_calls": [{"name", "arguments"}]}]
 """
 
 from __future__ import annotations
@@ -53,6 +55,16 @@ def make_model(spec: str) -> ModelClient:
     provider, _, rest = spec.partition(":")
     if not rest:
         raise ValueError(f"model spec must look like provider:model, got {spec!r}")
+    if provider == "script":
+        import json
+
+        from .scripted import ByStepModel, calls, reply
+
+        items = json.loads(open(rest, encoding="utf-8").read())
+        script = [calls([(c["name"], c.get("arguments") or {}, c.get("id")) for c in it["tool_calls"]],
+                        text=it.get("content", "")) if it.get("tool_calls") else reply(it.get("content", ""))
+                  for it in items]
+        return ByStepModel(script, name=spec)
     if provider == "anthropic":
         from .anthropic_client import AnthropicClient
 

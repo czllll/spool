@@ -1,0 +1,53 @@
+{
+  "products": [
+    {
+      "sku": "BAT-AA-8-ECO",
+      "name": "EcoCell AA batteries, 8-pack",
+      "price": 6.49,
+      "in_stock": 0,
+      "description": "Alkaline AA batteries, pack of 8."
+    },
+    {
+      "sku": "BAT-AA-8-PWR",
+      "name": "PowerMax AA batteries, 8-pack",
+      "price": 7.99,
+      "in_stock": 40,
+      "description": "Alkaline AA batteries, pack of 8. Ten-year shelf life."
+    },
+    {
+      "sku": "BAT-AA-8-PRO",
+      "name": "VoltPro AA batteries, 8-pack",
+      "price": 9.49,
+      "in_stock": 15,
+      "description": "Alkaline AA batteries, pack of 8."
+    },
+    {
+      "sku": "BAT-AA-16-PWR",
+      "name": "PowerMax AA batteries, 16-pack",
+      "price": 13.49,
+      "in_stock": 25,
+      "description": "Alkaline AA batteries, pack of 16."
+    },
+    {
+      "sku": "BAT-AAA-8-PWR",
+      "name": "PowerMax AAA batteries, 8-pack",
+      "price": 5.99,
+      "in_stock": 30,
+      "description": "Alkaline AAA batteries, pack of 8."
+    },
+    {
+      "sku": "FLT-4-100",
+      "name": "Coffee filters #4, 100 count",
+      "price": 4.29,
+      "in_stock": 60,
+      "description": "Unbleached cone coffee filters, size 4."
+    },
+    {
+      "sku": "FLT-2-100",
+      "name": "Coffee filters #2, 100 count",
+      "price": 3.79,
+      "in_stock": 60,
+      "description": "Unbleached cone coffee filters, size 2."
+    }
+  ]
+}

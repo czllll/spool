@@ -14,22 +14,24 @@ from pathlib import Path
 from typing import Iterable
 
 from . import events as ev
-from .context import DEFAULT_SYSTEM_PROMPT, build_messages
+from .connectors import session_registry
+from .context import DEFAULT_SYSTEM_PROMPT, build_messages, services_block
 from .eval.runner import load_results
 from .models.openai_compat import OpenAICompatClient
 from .state import replay
 from .store import EventStore
-from .tools.builtin import DEFAULT_TOOLS, builtin_registry
+from .tools.builtin import builtin_registry
 
 
 def trajectory(events: list) -> dict:
     state = replay(events)
     cfg = state.config
-    tools = builtin_registry().subset(cfg.tools if cfg.tools is not None else DEFAULT_TOOLS).schemas()
+    tools = session_registry(state, builtin_registry()).schemas()
     # Final assistant turn included: build from the whole log, not just up to the last request.
     wire = [OpenAICompatClient._wire_message(m) for m in build_messages(events, state)]
     return {
-        "messages": [{"role": "system", "content": cfg.system_prompt or DEFAULT_SYSTEM_PROMPT}, *wire],
+        "messages": [{"role": "system", "content": (cfg.system_prompt or DEFAULT_SYSTEM_PROMPT) + services_block(state)},
+                     *wire],
         "tools": [{"type": "function", "function": t} for t in tools],
         "meta": {
             "session_id": state.session_id,

@@ -14,6 +14,8 @@
     spool report RESULTS_DIR... [-o report.md]
     spool export RESULTS_DIR... -o data.jsonl [--all]
     spool web [--port 8765] [--model local]     local web app: start tasks, watch them live, approve, branch
+    spool connectors [NAME...]      the configured MCP connectors' tools and the policy for each
+    (global: --connectors FILE; per session: --connector NAME)
 """
 
 from __future__ import annotations
@@ -58,6 +60,8 @@ def explicit_overrides(args: argparse.Namespace) -> dict[str, Any]:
             changes[flag] = value
     if getattr(args, "tools", None):
         changes["tools"] = tuple(t.strip() for t in args.tools.split(",") if t.strip())
+    if getattr(args, "connector", None):
+        changes["connectors"] = tuple(dict.fromkeys(args.connector))
     return changes
 
 
@@ -143,8 +147,16 @@ def _store(args) -> EventStore:
     return EventStore(Path(args.db) if args.db else Path(args.data_dir) / "spool.db")
 
 
+def _connectors(args):
+    from .connectors import ConnectorManager
+
+    path = ConnectorManager.default_path(args.data_dir, getattr(args, "connectors", None))
+    return ConnectorManager.from_file(path, data_dir=args.data_dir)
+
+
 def _runtime(args, store: EventStore, model_spec: str) -> Runtime:
-    return Runtime(store, make_model(model_spec), data_dir=args.data_dir, on_event=_printer(args.quiet))
+    return Runtime(store, make_model(model_spec), data_dir=args.data_dir, on_event=_printer(args.quiet),
+                   connectors=_connectors(args))
 
 
 def _session_model(store: EventStore, sid: str, override: str | None) -> str:
@@ -433,12 +445,46 @@ def cmd_web(args) -> int:
         raise SystemExit("the web app needs its extra: pip install -e '.[web]'")
     store = _store(args)
     cfg = build_config(args)
-    runtime = Runtime(store, make_model(cfg.model), data_dir=args.data_dir)
+    runtime = Runtime(store, make_model(cfg.model), data_dir=args.data_dir, connectors=_connectors(args))
     app = create_app(runtime, default_config=cfg, read_only=args.read_only)
     mode = "read-only, " if args.read_only else ""
     print(f"Spool is running at http://{args.host}:{args.port}  ({mode}model: {cfg.model}, data: {args.data_dir})")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0
+
+
+def cmd_connectors(args) -> int:
+    """List each configured connector's tools and the policy Spool derives for them."""
+    manager = _connectors(args)
+    if manager is None:
+        raise SystemExit("no connectors configured: pass --connectors FILE or create <data-dir>/connectors.toml "
+                         "(see examples/connectors.toml)")
+    names = args.names or manager.names()
+
+    async def listing() -> dict[str, Any]:
+        probe = Path(args.data_dir) / "ledgers" / "_connectors_probe"
+        try:
+            return await manager.snapshot(names, workspace=Path.cwd(), state_dir=probe)
+        finally:
+            await manager.aclose()
+
+    snap = asyncio.run(listing())
+    if args.json:
+        print(json.dumps(snap, indent=2, ensure_ascii=False))
+        return 0
+    for name in names:
+        if name in snap["errors"]:
+            print(f"{name}: unavailable: {snap['errors'][name]}")
+            continue
+        info = snap["servers"][name]
+        server = info.get("server") or {}
+        print(f"{name}  ({server.get('name', '?')} {server.get('version', '')}, MCP {info['version']}, {info['era']} era)")
+        for t in [t for t in snap["tools"] if t["connector"] == name]:
+            flags = [("asks every time" if t["confirm"] else ""), ("exactly once" if t["ledgered"] else
+                     "re-run after a crash" if t["idempotent"] else "reported if interrupted")]
+            props = ", ".join(t["properties"]) or "no risk properties"
+            print(f"  {t['name']:<28} {props:<38} {'; '.join(f for f in flags if f)}")
+    return 1 if snap["errors"] else 0
 
 
 def cmd_export(args) -> int:
@@ -460,12 +506,14 @@ def _add_config_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--context-strategy", dest="context_strategy", choices=["full", "offload", "fold", "summarize"])
     p.add_argument("--max-steps", dest="max_steps", type=int)
     p.add_argument("--tools", help="comma-separated tool allow-list")
+    p.add_argument("--connector", action="append", metavar="NAME", help="give the session a connector's tools (repeatable)")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="spool", description="Event-sourced runtime for long-running agents")
     parser.add_argument("--data-dir", default=os.environ.get("SPOOL_HOME", ".spool"))
     parser.add_argument("--db", help="event store path (default: <data-dir>/spool.db)")
+    parser.add_argument("--connectors", help="connector definitions (default: $SPOOL_CONNECTORS or <data-dir>/connectors.toml)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("run", help="start a session and run it")
@@ -586,6 +634,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--read-only", action="store_true", help="browse sessions without running or changing anything")
     _add_config_flags(p)
     p.set_defaults(func=cmd_web)
+
+    p = sub.add_parser("connectors", help="list the configured connectors' tools and the policy for each")
+    p.add_argument("names", nargs="*")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_connectors)
 
     p = sub.add_parser("export", help="export trajectories as chat-format JSONL for fine-tuning")
     p.add_argument("results", nargs="+")

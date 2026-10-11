@@ -1,0 +1,9 @@
+prompt = "Ravi asked for the Q3 numbers. Email him a short summary of q3.md."
+connectors = ["mail"]
+tools = ["todo_write", "read_file"]
+max_steps = 10
+tags = ["mail", "expiry"]
+[config]
+approval_ttl_s = 4
+[approver]
+default = "ignore"

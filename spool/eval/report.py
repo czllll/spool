@@ -61,6 +61,22 @@ def crash_table(runs: list[tuple[dict[str, Any], list[dict[str, Any]]]]) -> str 
                       "|---|---|---|---|---|", *rows])
 
 
+def audit_table(runs: list[tuple[dict[str, Any], list[dict[str, Any]]]]) -> str | None:
+    """Side effects as the services recorded them, checked against the logs (tasks with connectors)."""
+    rows = []
+    for spec, results in runs:
+        a = summarize(results).get("audit")
+        if not a:
+            continue
+        rows.append(f"| {spec.get('name')} | {a['trials']} | {a['side_effects']} | {a['unapproved_side_effects']} "
+                    f"| {a['expired_executed']} | {a['untracked_side_effects']} | {a['duplicate_side_effects']} "
+                    f"| {a['approvals_asked']} / {a['approvals_granted']} / {a['approvals_expired']} |")
+    if not rows:
+        return None
+    return "\n".join(["| config | trials | writes | without approval | after expiry | untracked | duplicates "
+                      "| approvals asked / granted / expired |", "|---|---|---|---|---|---|---|---|", *rows])
+
+
 def render_report(paths: list[str | Path], title: str = "Eval report") -> str:
     runs = [load_run(p) for p in paths]
     parts = [f"# {title}", ""]
@@ -71,6 +87,9 @@ def render_report(paths: list[str | Path], title: str = "Eval report") -> str:
     crash = crash_table(runs)
     if crash:
         parts += ["", "## Crash recovery", "", crash]
+    actions = audit_table(runs)
+    if actions:
+        parts += ["", "## Side effects (service records vs. the log)", "", actions]
     for spec, results in runs:
         s = summarize(results)
         parts += ["", f"## {spec.get('name')}: per task", "",

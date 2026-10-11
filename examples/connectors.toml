@@ -1,0 +1,19 @@
+# Demo connectors: three local MCP servers (spool/services) that stand in for a person's accounts.
+# Their state lives in <data-dir>/services/ and is seeded from examples/seeds/ the first time.
+#
+#   spool --connectors examples/connectors.toml connectors        # list tools and their policy
+#   spool --connectors examples/connectors.toml web               # tasks and routines can use them
+#
+# Any MCP server that speaks stdio can be added the same way; per-tool settings
+# (confirm, properties, idempotent, hidden) override what its annotations suggest.
+
+[connector.mail]
+command = ["{python}", "-m", "spool.services.mail", "--db", "{state_dir}/mail.sqlite", "--seed", "{here}/seeds/mail.json"]
+sensitive = true
+
+[connector.calendar]
+command = ["{python}", "-m", "spool.services.calendar", "--db", "{state_dir}/calendar.sqlite", "--seed", "{here}/seeds/calendar.json"]
+sensitive = true
+
+[connector.shop]
+command = ["{python}", "-m", "spool.services.shop", "--db", "{state_dir}/shop.sqlite", "--seed", "{here}/seeds/shop.json"]

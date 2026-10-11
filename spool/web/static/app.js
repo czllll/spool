@@ -21,6 +21,7 @@ function el(tag, props = {}, ...children) {
 
 const S = {
   readOnly: false,
+  connectors: [],
   view: "sessions",
   editing: null,
   current: null,
@@ -231,6 +232,7 @@ async function submitComposer(event) {
           approval: $("opt-approval").value,
           context_strategy: $("opt-context").value,
           workspace: $("opt-workspace").value.trim() || undefined,
+          connectors: checkedServices("opt-services"),
         },
       });
       $("composer-text").value = "";
@@ -361,6 +363,7 @@ const HANDLERS = {
       facts.append(fact("Branched from", `${d.parent.session_id} at event ${d.parent.seq}`));
     }
     if (d.parent && d.parent.kind === "routine") facts.append(fact("Started by", `routine ${d.parent.routine}`));
+    if ((cfg.connectors || []).length) facts.append(fact("Services", cfg.connectors.join(", ")));
   },
 
   user_message(ev, d) {
@@ -629,6 +632,7 @@ function routineItem(r) {
     el("div", { class: "routine-meta" },
       el("span", { text: !r.enabled ? "Paused" : r.next_at ? `Next: ${when(r.next_at)}` : "No scheduled time" }),
       el("span", { text: `Approvals: ${approvalText}` }),
+      ((spec.config || {}).connectors || []).length ? el("span", { text: `Services: ${spec.config.connectors.join(", ")}` }) : null,
       el("span", { text: `Folder: ${r.workspace}` })),
     r.runs.length ? runs : el("p", { class: "routine-meta", text: "Has not run yet." }));
 }
@@ -708,6 +712,7 @@ function editRoutine(spec) {
   const watch = spec.triggers.find((t) => t.kind === "file");
   $("r-watch").value = watch ? watch.path : "";
   $("r-webhook").checked = spec.triggers.some((t) => t.kind === "webhook");
+  setServices("r-services", (spec.config || {}).connectors || []);
   $("routine-cancel").hidden = false;
   setWhenFields();
   $("r-task").focus();
@@ -731,7 +736,7 @@ async function saveRoutine(event) {
     triggers,
     workspace: $("r-workspace").value.trim() || null,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    config: { approval: $("r-approval").value },
+    config: { approval: $("r-approval").value, ...(checkedServices("r-services").length ? { connectors: checkedServices("r-services") } : {}) },
     approval_ttl_s: Math.max(1, Number($("r-ttl").value)) * 60,
   };
   try {
@@ -742,6 +747,22 @@ async function saveRoutine(event) {
   } catch (err) {
     $("routine-hint").textContent = err.message;
   }
+}
+
+// ----------------------------------------------------------------- services
+function renderServices(id) {
+  const box = $(id);
+  box.hidden = S.connectors.length === 0;
+  box.replaceChildren(box.querySelector("legend"), ...S.connectors.map((name) =>
+    el("label", {}, el("input", { type: "checkbox", value: name }), name)));
+}
+
+function checkedServices(id) {
+  return [...$(id).querySelectorAll("input:checked")].map((input) => input.value);
+}
+
+function setServices(id, names) {
+  $(id).querySelectorAll("input").forEach((input) => (input.checked = names.includes(input.value)));
 }
 
 // ---------------------------------------------------------------- approvals
@@ -807,6 +828,9 @@ $("resume").addEventListener("click", async () => {
 (async function boot() {
   const config = await api("/api/config").catch(() => ({}));
   S.readOnly = Boolean(config.read_only);
+  S.connectors = config.connectors || [];
+  renderServices("opt-services");
+  renderServices("r-services");
   if (S.readOnly) {
     $("composer").hidden = true;
     $("new-task").hidden = true;

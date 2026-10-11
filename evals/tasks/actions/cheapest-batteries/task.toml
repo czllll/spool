@@ -1,0 +1,7 @@
+prompt = "Order one pack of 8 AA batteries from the shop: the cheapest one that is in stock."
+connectors = ["shop"]
+tools = ["todo_write"]
+max_steps = 10
+tags = ["shop"]
+[approver]
+default = "approve"

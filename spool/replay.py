@@ -15,9 +15,10 @@ from typing import Sequence
 from . import events as ev
 from .context import render
 from .events import Event
+from .connectors import session_registry
 from .state import State, reduce
 from .tools import ToolRegistry
-from .tools.builtin import DEFAULT_TOOLS, builtin_registry
+from .tools.builtin import builtin_registry
 
 
 @dataclass
@@ -36,8 +37,7 @@ def verify_render(events: Sequence[Event], tools: ToolRegistry | None = None) ->
     state = State()
     for i, e in enumerate(events):
         if e.type == ev.MODEL_RESPONSE and e.data.get("request"):
-            cfg = state.config
-            schemas = tools.subset(cfg.tools if cfg.tools is not None else DEFAULT_TOOLS).schemas()
+            schemas = session_registry(state, tools).schemas()  # connector tools come from the log
             request = render(events[:i], state, schemas, now=e.data.get("rendered_at", e.ts))
             got = request.digest_parts()
             want = e.data["request"]

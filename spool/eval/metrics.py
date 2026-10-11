@@ -98,12 +98,20 @@ def summarize(results: Iterable[Mapping[str, Any]], k: int = 3) -> dict[str, Any
         "failures": dict(Counter(c for r in rows if (c := failure_category(r)))),
     }
     summary["policy_blocked_trials"] = sum(1 for r in rows if r.get("denied_calls", 0) > 0)
+    audited = [r["audit"] for r in rows if r.get("audit")]
+    if audited:
+        summary["audit"] = {key: sum(a.get(key, 0) for a in audited) for key in AUDIT_KEYS}
+        summary["audit"]["trials"] = len(audited)
     crashed = [r for r in rows if r.get("crashes", 0) > 0]
     if crashed:
         summary["crash_trials"] = len(crashed)
         summary["recovered_rate"] = sum(1 for r in crashed if r.get("status") in ("completed",)) / len(crashed)
         summary["duplicate_side_effects"] = sum(r.get("duplicate_effects", 0) for r in rows)
     return summary
+
+
+AUDIT_KEYS = ("side_effects", "unapproved_side_effects", "expired_executed", "untracked_side_effects",
+              "duplicate_side_effects", "approvals_asked", "approvals_granted", "approvals_expired")
 
 
 def per_task(results: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:

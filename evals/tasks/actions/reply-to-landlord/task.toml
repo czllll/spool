@@ -1,0 +1,7 @@
+prompt = "Reply to my landlord's email about the plumber: tell her Thursday 10:00-12:00 works for me. Then add the visit to my calendar."
+connectors = ["mail", "calendar"]
+tools = ["todo_write"]
+max_steps = 14
+tags = ["mail", "calendar"]
+[approver]
+default = "approve"

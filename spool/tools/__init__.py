@@ -60,6 +60,7 @@ class ToolSpec:
     path_reads: bool = True                  # the path's content reaches the model (classified per call)
     idempotent: bool = True                  # safe to run again if a crash interrupted it
     ledgered: bool = False                   # external side effect, deduplicated by idempotency key
+    confirm: bool = False                    # ask for approval before every call (sends, buys, deletes...)
 
     def schema(self) -> dict[str, Any]:
         return {"name": self.name, "description": self.description, "parameters": self.parameters}
@@ -83,6 +84,10 @@ class ToolRegistry:
         # Sorted by name so the tools block of every request is byte-identical.
         return [self._specs[name].schema() for name in sorted(self._specs)]
 
+    def merged(self, specs: Iterable[ToolSpec]) -> "ToolRegistry":
+        """This registry plus `specs` (names must not collide)."""
+        return ToolRegistry([*self._specs.values(), *specs])
+
     def subset(self, names: Iterable[str] | None) -> "ToolRegistry":
         if names is None:
             return self
@@ -103,23 +108,32 @@ _TYPES: dict[str, tuple[type, ...]] = {
 }
 
 
-def validate_args(schema: Mapping[str, Any], args: Any, path: str = "") -> list[str]:
-    """Validate against the JSON-schema subset our tools use.
+def _is_type(value: Any, kind: str) -> bool:
+    if kind == "null":
+        return value is None
+    allowed = _TYPES.get(kind)
+    if allowed is None:
+        return True  # a type this subset does not know: do not reject on it
+    return isinstance(value, allowed) and not (kind in ("integer", "number") and isinstance(value, bool))
 
-    Covers type, required, properties, items, enum and additionalProperties.
+
+def validate_args(schema: Mapping[str, Any], args: Any, path: str = "") -> list[str]:
+    """Validate against the JSON-schema subset our tools (and typical MCP tools) use.
+
+    Covers type (including lists of types and "null"), required, properties, items,
+    enum and additionalProperties; other keywords are accepted without checking.
     Errors are phrased for the model: they go back to it as the tool result.
     """
     errors: list[str] = []
     where = path or "arguments"
     expected = schema.get("type")
     if expected:
-        allowed = _TYPES.get(expected, ())
-        ok = isinstance(args, allowed) and not (expected in ("integer", "number") and isinstance(args, bool))
-        if not ok:
-            return [f"{where} must be of type {expected}, got {type(args).__name__}"]
+        kinds = list(expected) if isinstance(expected, list) else [expected]
+        if not any(_is_type(args, k) for k in kinds):
+            return [f"{where} must be of type {' or '.join(kinds)}, got {type(args).__name__}"]
     if "enum" in schema and args not in schema["enum"]:
         errors.append(f"{where} must be one of {schema['enum']}, got {args!r}")
-    if expected == "object" and isinstance(args, dict):
+    if isinstance(args, dict) and (expected is None or expected == "object" or "object" in (expected or ())):
         props = schema.get("properties", {})
         for req in schema.get("required", []):
             if req not in args:
@@ -129,7 +143,7 @@ def validate_args(schema: Mapping[str, Any], args: Any, path: str = "") -> list[
                 errors.extend(validate_args(props[key], value, f"{path}.{key}" if path else key))
             elif schema.get("additionalProperties") is False:
                 errors.append(f"unexpected argument {key!r}")
-    if expected == "array" and isinstance(args, list) and "items" in schema:
+    if isinstance(args, list) and isinstance(schema.get("items"), dict):
         for i, item in enumerate(args):
             errors.extend(validate_args(schema["items"], item, f"{where}[{i}]"))
     return errors

@@ -109,6 +109,9 @@ class State:
     loop_warnings: int = 0
     recent_signatures: tuple[str, ...] = ()
     todos: tuple[Mapping[str, Any], ...] = ()
+    connectors_loaded: bool = False
+    connector_tools: tuple[Mapping[str, Any], ...] = ()      # recorded tool entries (connectors.tool_entry)
+    connector_servers: Mapping[str, Mapping[str, Any]] = _EMPTY
     wake_at: float | None = None
     folded_through: int = 0
     compactions: int = 0
@@ -235,6 +238,12 @@ def reduce(state: State, event: Event) -> State:
     if t == ev.NOTE:
         if d.get("kind") == "woke":
             return dataclasses.replace(s, wake_at=None, status="running")
+        if d.get("kind") == "connector_tools":
+            return dataclasses.replace(
+                s, connectors_loaded=True,
+                connector_tools=tuple(MappingProxyType(dict(t)) for t in d.get("tools") or ()),
+                connector_servers=MappingProxyType({k: MappingProxyType(dict(v)) for k, v in (d.get("servers") or {}).items()}),
+            )
         return s
 
     raise ValueError(f"unknown event type {t!r}")

@@ -29,6 +29,7 @@ from typing import Any, Callable, Mapping
 from . import events as ev
 from . import policy
 from .config import AgentConfig
+from .connectors import ConnectorManager, session_registry
 from .context import CHARS_PER_TOKEN, estimate_tokens, plan_compaction, plan_fold, render, summary_request
 from .decide import (
     Authorize,
@@ -133,6 +134,7 @@ class Runtime:
         clock: Callable[[], float] = time.time,
         crash_hook: Callable[[str, Mapping[str, Any]], None] | None = None,
         on_event: Callable[[Event], None] | None = None,
+        connectors: ConnectorManager | None = None,
     ) -> None:
         self.store = store
         self.model = model
@@ -145,6 +147,7 @@ class Runtime:
         self.clock = clock
         self.crash_hook = crash_hook if crash_hook is not None else crash_hook_from_env()
         self.on_event = on_event
+        self.connectors = connectors
         self._handles: dict[str, _Handle] = {}
 
     # ---------------------------------------------------------------- sessions
@@ -249,6 +252,15 @@ class Runtime:
     # --------------------------------------------------------------------- run
     async def run(self, session_id: str, *, max_actions: int | None = None) -> RunResult:
         h = self._open(session_id)
+        try:
+            return await self._run(h, max_actions)
+        finally:
+            if self.connectors is not None and h.state.depth == 0:
+                # Session-scoped connector servers stop with the run; their state is on disk.
+                await self.connectors.release(self.ledger_dir(session_id))
+
+    async def _run(self, h: "_Handle", max_actions: int | None) -> RunResult:
+        session_id = h.session_id
         performed = 0
         while True:
             action = decide(h.state, now=self.clock())
@@ -295,12 +307,30 @@ class Runtime:
                 raise RuntimeError(f"unhandled action {action!r}")
 
     # ------------------------------------------------------------- model step
-    def _registry(self, cfg: AgentConfig) -> ToolRegistry:
-        return self.tools.subset(cfg.tools if cfg.tools is not None else DEFAULT_TOOLS)
+    def _registry(self, h: _Handle) -> ToolRegistry:
+        handler_for = self.connectors.handler_for if self.connectors is not None else None
+        return session_registry(h.state, self.tools, handler_for)
+
+    async def _load_connectors(self, h: _Handle) -> None:
+        """Record the connector tools before the first model call (see connectors.py)."""
+        names = list(h.state.config.connectors)
+        if self.connectors is None:
+            note = {"kind": "connector_tools", "tools": [], "servers": {},
+                    "errors": {n: "no connectors are configured in this process" for n in names}}
+        else:
+            note = await self.connectors.snapshot(names, workspace=Path(h.state.workspace),
+                                                  state_dir=self._state_dir(h))
+        h.append(ev.NOTE, note)
+
+    def _state_dir(self, h: _Handle) -> Path:
+        root = h.session_id if h.state.depth == 0 else (h.state.parent or {}).get("session_id", h.session_id)
+        return self.ledger_dir(root)
 
     async def _call_model(self, h: _Handle) -> None:
         cfg = h.state.config
-        schemas = self._registry(cfg).schemas()
+        if cfg.connectors and not h.state.connectors_loaded:
+            await self._load_connectors(h)
+        schemas = self._registry(h).schemas()
         rendered_at = self.clock()
         request = render(h.events, h.state, schemas, now=rendered_at)
         estimated = estimate_tokens(request)
@@ -339,7 +369,7 @@ class Runtime:
 
     # -------------------------------------------------------------- tool step
     def _authorize(self, h: _Handle, call: ToolCall) -> None:
-        registry = self._registry(h.state.config)
+        registry = self._registry(h)
         spec = registry.get(call.name)
         if spec is None:
             h.append(ev.TOOL_COMPLETED, {
@@ -364,7 +394,7 @@ class Runtime:
 
     async def _execute(self, h: _Handle, call: ToolCall, recovering: bool) -> None:
         cfg = h.state.config
-        spec = self._registry(cfg).get(call.name)
+        spec = self._registry(h).get(call.name)
         if spec is None:  # config changed under a recovering session
             h.append(ev.TOOL_COMPLETED, {"call_id": call.id, "name": call.name, "ok": False,
                                          "kind": "invalid", "error": "tool no longer available", "output": ""})
@@ -395,7 +425,7 @@ class Runtime:
             call_id=call.id,
             idem_key=idem_key,
             config=cfg,
-            ledger_dir=self.ledger_dir(sid if h.state.depth == 0 else (h.state.parent or {}).get("session_id", sid)),
+            ledger_dir=self._state_dir(h),
             fixtures=self._fixtures(h),
             history=h.completed,
             now=self.clock,

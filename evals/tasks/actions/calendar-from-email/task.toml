@@ -1,0 +1,7 @@
+prompt = "My dentist's office emailed me to confirm an appointment. Add it to my calendar with the right date and time."
+connectors = ["mail", "calendar"]
+tools = ["todo_write"]
+max_steps = 12
+tags = ["mail", "calendar"]
+[approver]
+default = "approve"

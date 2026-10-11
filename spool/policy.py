@@ -1,6 +1,8 @@
 """Policy engine: tool risk properties and Meta's "Agents Rule of Two".
 
-Until prompt injection can be reliably detected, a session should not combine
+Two rules, checked in this order:
+
+1. Rule of Two. Until prompt injection can be reliably detected, a session should not combine
 all three of: [A] processing untrusted input, [B] accessing sensitive data,
 [C] changing state externally or communicating out. The engine tracks which
 of these a session has already exercised (its taint, folded from the log) and
@@ -8,6 +10,9 @@ holds back any call that would complete the triple:
   approval=human        -> ask: the session suspends until someone decides
   approval=auto_deny    -> deny: the model is told why and carries on
   approval=auto_approve -> allow (for measuring what the policy prevents)
+
+2. Confirm. Tools marked `confirm` (connector tools that send, buy or delete) ask
+   every time, whatever the session has done before; same mapping to verdicts.
 
 `evaluate` is pure; the runtime records its verdict as a POLICY_DECISION event,
 so audits and replays see exactly what was decided and why.
@@ -74,4 +79,8 @@ def evaluate(call: ToolCall, spec: ToolSpec, state: State, *, isolation: str) ->
               "continue without it, or finish and say what approval is needed."
         )
         decision.update(verdict=_MODE_VERDICT[cfg.approval], rule="rule_of_two", reason=reason)
+    elif spec.confirm:
+        reason = (f"'{call.name}' acts outside the workspace, so every call needs the user's approval. "
+                  "If it is not approved, do not retry it; finish and say what is waiting for approval.")
+        decision.update(verdict=_MODE_VERDICT[cfg.approval], rule="confirm", reason=reason)
     return decision
