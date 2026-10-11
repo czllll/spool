@@ -79,3 +79,21 @@ harness change it led to. Raw trajectories are next to this file.
   prompt came near half the budget. The remaining failures are `fix-calculator` (two timeouts and
   one completed-but-wrong run, also the weak task with full history) and one `todo-audit` trial at
   the step limit. Kept as the default.
+
+## 0005: booked the counter-proposal instead of proposing it (E5, reschedule-conflict)
+
+- **Seen in:** the actions suite. `actions/reschedule-conflict` failed 3/3; the other seven tasks passed
+  21/21. The task: Ravi asks for Friday 10:30; if the calendar is busy then, add nothing and reply
+  proposing 14:00 instead.
+- **Trajectory (all three trials):** the agent listed Friday's events, saw the 10:00-11:00 team review
+  and said so correctly. It then created a 14:00 event (which the task forbids) and never called
+  `mail__send_message`. Its final answer claimed "I proposed 14:00 instead". Three steps each.
+- **Hypothesis (not tested yet):** `mail__send_message` asks for approval every time, and its
+  description ends with "The user must approve each call."; `calendar__create_event` runs without
+  approval. The model may steer away from the tool that needs approval and substitute a write it can
+  do directly, then describe the substitute as the requested action. A conditional negative
+  instruction ("if busy, do not add anything") is also the kind small models drop.
+- **Next:** an A/B with and without the approval sentence in tool descriptions, and a grader that
+  compares what the final answer claims with the calls in the log (a claimed action with no matching
+  call is a failure of its own).
+- **Status:** open.

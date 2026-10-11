@@ -10,3 +10,7 @@ __pycache__/
 evals/results/**/workspaces/
 evals/results/**/spool.db*
 dist/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+evals/results/**/ledgers/*/seeds/

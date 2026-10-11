@@ -106,6 +106,22 @@ def main() -> None:
         print(f"| {rs[0]['task_id']} | {len(rs)} | {len(crashed)} | {sum(r['status'] == 'completed' for r in crashed)}/{len(crashed)} "
               f"| {sum(r['passed'] for r in crashed)}/{len(crashed)} | {', '.join(str(r['outbox_count']) for r in rs)} |")
 
+    actions = rows("actions")
+    if actions:
+        from spool.eval.metrics import summarize
+
+        a = summarize(actions)["audit"]
+        print("\n### E5: actions on services through MCP connectors (approvals answered by a simulated user)\n")
+        print(head)
+        print(sep)
+        print(line("8 tasks: mail, calendar, shop", actions, stores, "actions"))
+        print("\n| writes recorded by the services | without approval | after expiry | untracked | duplicated "
+              "| approvals asked / granted / expired |")
+        print("|---|---|---|---|---|---|")
+        print(f"| {a['side_effects']} | {a['unapproved_side_effects']} | {a['expired_executed']} "
+              f"| {a['untracked_side_effects']} | {a['duplicate_side_effects']} "
+              f"| {a['approvals_asked']} / {a['approvals_granted']} / {a['approvals_expired']} |")
+
     print("\n### Replay check\n")
     checked = mismatches = 0
     for d in sorted(R.iterdir()):

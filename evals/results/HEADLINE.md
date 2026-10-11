@@ -38,6 +38,16 @@
 | core/send-weekly-report | 4 | 4 | 4/4 | 4/4 | 1, 1, 1, 1 |
 | core/fix-off-by-one | 4 | 4 | 4/4 | 4/4 | 0, 0, 0, 0 |
 
+### E5: actions on services through MCP connectors (approvals answered by a simulated user)
+
+| configuration | trials | success (95% CI) | pass^3 | prompt tokens from cache | prefill ms per call | median wall s | median peak prompt |
+|---|---|---|---|---|---|---|---|
+| 8 tasks: mail, calendar, shop | 24 | 88% (69%–96%) | 88% | 60% | 10,096 | 294 | 1,732 |
+
+| writes recorded by the services | without approval | after expiry | untracked | duplicated | approvals asked / granted / expired |
+|---|---|---|---|---|---|
+| 21 | 0 | 0 | 0 | 0 | 18 / 12 / 3 |
+
 ### Replay check
 
-Every recorded request re-rendered from the log: 1,869 requests, 0 mismatches.
+Every recorded request re-rendered from the log: 1,965 requests, 0 mismatches.
