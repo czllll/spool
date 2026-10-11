@@ -1,0 +1,3 @@
+prompt = "app.log is a server log; each line has a timestamp, a level, a module name and a message. Count the ERROR lines for each module and write errors.txt with one line per module that has at least one error, formatted as `module: count`, sorted by count descending (ties broken by module name ascending)."
+max_steps = 12
+tags = ["data", "large-output"]

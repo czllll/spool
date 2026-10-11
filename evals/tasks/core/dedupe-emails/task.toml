@@ -1,0 +1,3 @@
+prompt = "emails.txt has one email address per line, with duplicates that differ only in letter case or surrounding spaces. Write unique.txt with each address exactly once, lowercased and trimmed, in the order of first appearance."
+max_steps = 10
+tags = ["easy", "data"]

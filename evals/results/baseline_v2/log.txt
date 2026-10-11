@@ -1,0 +1,96 @@
+[baseline_v2] 36 trials to run (0 already done), concurrency 3
+[baseline_v2] 1/36 core/config-edit t0 PASS (completed, 5 steps, 137s)
+[baseline_v2] 2/36 core/csv-region-totals t0 PASS (completed, 4 steps, 222s)
+[baseline_v2] 3/36 core/dedupe-emails t0 PASS (completed, 6 steps, 241s)
+[baseline_v2] 4/36 core/greeting t0 PASS (completed, 2 steps, 62s)
+[baseline_v2] 5/36 core/fix-off-by-one t0 PASS (completed, 7 steps, 359s)
+[baseline_v2] 6/36 core/json-to-csv t0 PASS (completed, 4 steps, 253s)
+[baseline_v2] 7/36 core/implement-slugify t0 PASS (completed, 8 steps, 407s)
+[baseline_v2] 8/36 core/log-error-counts t0 PASS (completed, 5 steps, 195s)
+[baseline_v2] 9/36 core/rename-extensions t0 PASS (completed, 4 steps, 168s)
+[baseline_v2] 10/36 core/word-frequency t0 PASS (completed, 6 steps, 297s)
+[baseline_v2] 11/36 core/config-edit t1 PASS (completed, 5 steps, 106s)
+[baseline_v2] 12/36 core/send-weekly-report t0 PASS (completed, 3 steps, 496s)
+[baseline_v2] 13/36 core/rename-function t0 fail (max_steps, 15 steps, 649s)
+[baseline_v2] 14/36 core/csv-region-totals t1 PASS (completed, 5 steps, 261s)
+[baseline_v2] 15/36 core/greeting t1 PASS (completed, 3 steps, 52s)
+[baseline_v2] 16/36 core/fix-off-by-one t1 PASS (completed, 7 steps, 314s)
+[baseline_v2] 17/36 core/dedupe-emails t1 PASS (completed, 7 steps, 485s)
+[baseline_v2] 18/36 core/json-to-csv t1 PASS (completed, 7 steps, 281s)
+[baseline_v2] 19/36 core/implement-slugify t1 PASS (completed, 8 steps, 496s)
+[baseline_v2] 20/36 core/rename-extensions t1 PASS (completed, 4 steps, 156s)
+[baseline_v2] 21/36 core/log-error-counts t1 PASS (completed, 11 steps, 610s)
+[baseline_v2] 22/36 core/send-weekly-report t1 fail (completed, 3 steps, 441s)
+[baseline_v2] 23/36 core/rename-function t1 fail (max_steps, 15 steps, 573s)
+[baseline_v2] 24/36 core/word-frequency t1 PASS (completed, 6 steps, 307s)
+[baseline_v2] 25/36 core/config-edit t2 PASS (completed, 5 steps, 153s)
+[baseline_v2] 26/36 core/csv-region-totals t2 PASS (completed, 4 steps, 256s)
+[baseline_v2] 27/36 core/greeting t2 PASS (completed, 2 steps, 55s)
+[baseline_v2] 28/36 core/fix-off-by-one t2 PASS (completed, 7 steps, 278s)
+[baseline_v2] 29/36 core/dedupe-emails t2 fail (completed, 3 steps, 387s)
+[baseline_v2] 30/36 core/implement-slugify t2 PASS (completed, 6 steps, 319s)
+[baseline_v2] 31/36 core/json-to-csv t2 PASS (completed, 4 steps, 293s)
+[baseline_v2] 32/36 core/rename-extensions t2 PASS (completed, 4 steps, 135s)
+[baseline_v2] 33/36 core/log-error-counts t2 PASS (completed, 7 steps, 354s)
+[baseline_v2] 34/36 core/send-weekly-report t2 PASS (completed, 3 steps, 334s)
+[baseline_v2] 35/36 core/word-frequency t2 PASS (completed, 6 steps, 268s)
+[baseline_v2] 36/36 core/rename-function t2 fail (max_steps, 15 steps, 425s)
+# Eval: baseline_v2
+
+- **baseline_v2**: model `local`, 3 trials/task, config `evals/configs/baseline_v2.toml`
+
+## Summary
+
+| config | trials | success (95% CI) | pass^3 | steps | input tok | cache reuse | prefill ms/call | wall s (median) | prefix breaks | tool err |
+|---|---|---|---|---|---|---|---|---|---|---|
+| baseline_v2 | 36 | 86% (71%–94%) | 75% | 6.0 | 13,540 | 79% | 6,431 | 287 | 0.0 | 0% |
+
+## baseline_v2: per task
+
+| task | passed | median steps | median wall s | failures |
+|---|---|---|---|---|
+| core/config-edit | 3/3 | 5 | 137 | – |
+| core/csv-region-totals | 3/3 | 4 | 256 | – |
+| core/dedupe-emails | 2/3 | 6 | 387 | wrong_result_claimed_done×1 |
+| core/fix-off-by-one | 3/3 | 7 | 314 | – |
+| core/greeting | 3/3 | 2 | 55 | – |
+| core/implement-slugify | 3/3 | 8 | 407 | – |
+| core/json-to-csv | 3/3 | 4 | 281 | – |
+| core/log-error-counts | 3/3 | 7 | 354 | – |
+| core/rename-extensions | 3/3 | 4 | 156 | – |
+| core/rename-function | 0/3 | 15 | 573 | ran_out_of_steps×3 |
+| core/send-weekly-report | 2/3 | 3 | 441 | wrong_result_claimed_done×1 |
+| core/word-frequency | 3/3 | 6 | 297 | – |
+
+Failure categories: ran_out_of_steps 3, wrong_result_claimed_done 2
+
+[baseline_v2] 0 trials to run (36 already done), concurrency 3
+# Eval: baseline_v2
+
+- **baseline_v2**: model `local`, 3 trials/task, config `evals/configs/baseline_v2.toml`
+
+## Summary
+
+| config | trials | success (95% CI) | pass^3 | steps | input tok | cache reuse | prefill ms/call | wall s (median) | prefix breaks | tool err |
+|---|---|---|---|---|---|---|---|---|---|---|
+| baseline_v2 | 36 | 86% (71%–94%) | 75% | 6.0 | 13,540 | 79% | 6,431 | 287 | 0.0 | 0% |
+
+## baseline_v2: per task
+
+| task | passed | median steps | median wall s | failures |
+|---|---|---|---|---|
+| core/config-edit | 3/3 | 5 | 137 | – |
+| core/csv-region-totals | 3/3 | 4 | 256 | – |
+| core/dedupe-emails | 2/3 | 6 | 387 | wrong_result_claimed_done×1 |
+| core/fix-off-by-one | 3/3 | 7 | 314 | – |
+| core/greeting | 3/3 | 2 | 55 | – |
+| core/implement-slugify | 3/3 | 8 | 407 | – |
+| core/json-to-csv | 3/3 | 4 | 281 | – |
+| core/log-error-counts | 3/3 | 7 | 354 | – |
+| core/rename-extensions | 3/3 | 4 | 156 | – |
+| core/rename-function | 0/3 | 15 | 573 | ran_out_of_steps×3 |
+| core/send-weekly-report | 2/3 | 3 | 441 | wrong_result_claimed_done×1 |
+| core/word-frequency | 3/3 | 6 | 297 | – |
+
+Failure categories: ran_out_of_steps 3, wrong_result_claimed_done 2
+

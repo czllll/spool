@@ -1,0 +1,56 @@
+[ctx_fold] 12 trials to run (0 already done), concurrency 3
+[ctx_fold] 1/12 long/log-incident t0 PASS (completed, 7 steps, 285s)
+[ctx_fold] 2/12 long/todo-audit t0 fail (max_steps, 25 steps, 850s)
+[ctx_fold] 3/12 long/wiki-research t0 fail (max_steps, 20 steps, 1128s)
+[ctx_fold] 4/12 long/log-incident t1 PASS (completed, 7 steps, 286s)
+[ctx_fold] 5/12 long/fix-calculator t0 fail (completed, 7 steps, 1744s)
+[ctx_fold] 6/12 long/wiki-research t1 fail (max_steps, 20 steps, 813s)
+[ctx_fold] 7/12 long/todo-audit t1 fail (completed, 15 steps, 889s)
+[ctx_fold] 8/12 long/log-incident t2 PASS (completed, 6 steps, 238s)
+[ctx_fold] 9/12 long/fix-calculator t1 fail (timeout, 17 steps, 2400s)
+[ctx_fold] 10/12 long/wiki-research t2 fail (max_steps, 20 steps, 810s)
+[ctx_fold] 11/12 long/todo-audit t2 fail (max_steps, 25 steps, 2126s)
+[ctx_fold] 12/12 long/fix-calculator t2 fail (timeout, 13 steps, 2400s)
+# Eval: ctx_fold
+
+- **ctx_fold**: model `local`, 3 trials/task, config `evals/configs/ctx_fold.toml`
+
+## Summary
+
+| config | trials | success (95% CI) | pass^3 | steps | input tok | cache reuse | prefill ms/call | wall s (median) | prefix breaks | tool err |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ctx_fold | 12 | 25% (9%–53%) | 25% | 15.2 | 65,134 | 80% | 8,589 | 869 | 1.0 | 1% |
+
+## ctx_fold: per task
+
+| task | passed | median steps | median wall s | failures |
+|---|---|---|---|---|
+| long/fix-calculator | 0/3 | 13 | 2400 | wrong_result_claimed_done×1, did_not_finish:timeout×2 |
+| long/log-incident | 3/3 | 7 | 285 | – |
+| long/todo-audit | 0/3 | 25 | 889 | ran_out_of_steps×2, wrong_result_claimed_done×1 |
+| long/wiki-research | 0/3 | 20 | 813 | ran_out_of_steps×3 |
+
+Failure categories: did_not_finish:timeout 2, ran_out_of_steps 5, wrong_result_claimed_done 2
+
+[ctx_fold] 0 trials to run (12 already done), concurrency 3
+# Eval: ctx_fold
+
+- **ctx_fold**: model `local`, 3 trials/task, config `evals/configs/ctx_fold.toml`
+
+## Summary
+
+| config | trials | success (95% CI) | pass^3 | steps | input tok | cache reuse | prefill ms/call | wall s (median) | prefix breaks | tool err |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ctx_fold | 12 | 25% (9%–53%) | 25% | 15.2 | 65,134 | 80% | 8,589 | 869 | 1.0 | 1% |
+
+## ctx_fold: per task
+
+| task | passed | median steps | median wall s | failures |
+|---|---|---|---|---|
+| long/fix-calculator | 0/3 | 13 | 2400 | wrong_result_claimed_done×1, did_not_finish:timeout×2 |
+| long/log-incident | 3/3 | 7 | 285 | – |
+| long/todo-audit | 0/3 | 25 | 889 | ran_out_of_steps×2, wrong_result_claimed_done×1 |
+| long/wiki-research | 0/3 | 20 | 813 | ran_out_of_steps×3 |
+
+Failure categories: did_not_finish:timeout 2, ran_out_of_steps 5, wrong_result_claimed_done 2
+

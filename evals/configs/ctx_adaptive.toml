@@ -1,0 +1,12 @@
+name = "ctx_adaptive"
+description = "E2 follow-up (failure 0004): offload large outputs only once the prompt would pass half of a 24k-token budget."
+model = "local"
+temperature = 0.7
+max_output_tokens = 2048
+context_strategy = "offload"
+context_budget_tokens = 24000
+offload_when_over = 0.5
+policy = "rule_of_two"
+approval = "auto_deny"
+sandbox = "auto"
+free_plan_steps = 0       # plan-only turns are charged, as in the recorded runs

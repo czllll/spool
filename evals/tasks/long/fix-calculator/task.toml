@@ -1,0 +1,4 @@
+prompt = "The calculator in calc.py fails several of the tests in test_calc.py. Fix calc.py until `python3 test_calc.py` prints 'all 10 tests passed'. Do not edit test_calc.py."
+max_steps = 30
+tags = ["long", "code", "debug"]
+timeout_s = 2400  # 40 minutes: ~2 tokens/s per slot with 3 sessions on one laptop

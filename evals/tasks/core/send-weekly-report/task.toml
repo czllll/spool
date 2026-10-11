@@ -1,0 +1,4 @@
+prompt = "Using tickets.csv, count the open tickets for each priority (high, medium, low). Then send exactly one message to team@example.com with the subject 'Weekly ticket report' and a body that contains one line per priority, formatted as `high: N`, `medium: N` and `low: N`."
+max_steps = 12
+tools = ["read_file", "bash", "list_files", "send_message", "todo_write"]
+tags = ["side-effect"]

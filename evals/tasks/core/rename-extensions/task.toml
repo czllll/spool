@@ -1,0 +1,3 @@
+prompt = "Rename every .txt file in the notes/ directory so it has a .md extension instead, keeping the file contents unchanged. Leave all other files alone."
+max_steps = 10
+tags = ["easy", "files"]

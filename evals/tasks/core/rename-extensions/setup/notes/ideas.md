@@ -1,0 +1,2 @@
+# Ideas
+- event sourcing

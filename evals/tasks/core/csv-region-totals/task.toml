@@ -1,0 +1,3 @@
+prompt = """sales.csv contains one row per sale. Compute the total revenue (units x unit_price) for each region and write it to summary.json as a JSON object mapping each region name to its total, rounded to 2 decimals, e.g. {"east": 1234.5, "north": 99.0}."""
+max_steps = 12
+tags = ["data"]

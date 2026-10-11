@@ -1,0 +1,14 @@
+name = "ctx_full"
+description = "Ablation E2: context strategy 'full' (budget 12k tokens so fold/summarize trigger inside the 32k window)."
+model = "local"
+temperature = 0.7
+max_output_tokens = 2048
+context_strategy = "full"
+context_budget_tokens = 12000
+compact_trigger = 0.75
+keep_recent_steps = 4
+policy = "rule_of_two"
+approval = "auto_deny"
+sandbox = "auto"
+offload_when_over = 0.0   # fixed-threshold offloading, as in the recorded runs
+free_plan_steps = 0       # plan-only turns are charged, as in the recorded runs

@@ -1,0 +1,50 @@
+[crash_more] 4 trials to run (0 already done), concurrency 2
+[crash_more] 1/4 core/fix-off-by-one t1 PASS (completed, 6 steps, 176s) crash=after_tool_started::2
+[crash_more] 2/4 core/fix-off-by-one t0 PASS (completed, 6 steps, 211s) crash=after_model_response::2
+[crash_more] 3/4 core/fix-off-by-one t2 PASS (completed, 7 steps, 225s) crash=after_tool_executed::1
+[crash_more] 4/4 core/fix-off-by-one t3 PASS (completed, 7 steps, 197s) crash=after_tool_executed::3
+# Eval: crash_more
+
+- **crash_more**: model `local`, 4 trials/task, config `evals/configs/baseline.toml`
+
+## Summary
+
+| config | trials | success (95% CI) | pass^3 | steps | input tok | cache reuse | prefill ms/call | wall s (median) | prefix breaks | tool err |
+|---|---|---|---|---|---|---|---|---|---|---|
+| crash_more | 4 | 100% (51%–100%) | 100% | 6.5 | 13,180 | 71% | 7,140 | 204 | 0.0 | 5% |
+
+## Crash recovery
+
+| config | crashed trials | finished after resume | passed | extra messages sent |
+|---|---|---|---|---|
+| crash_more | 4 | 100% | 100% | 0 |
+
+## crash_more: per task
+
+| task | passed | median steps | median wall s | failures |
+|---|---|---|---|---|
+| core/fix-off-by-one | 4/4 | 6 | 204 | – |
+
+[crash_more] 0 trials to run (4 already done), concurrency 2
+# Eval: crash_more
+
+- **crash_more**: model `local`, 4 trials/task, config `evals/configs/baseline.toml`
+
+## Summary
+
+| config | trials | success (95% CI) | pass^3 | steps | input tok | cache reuse | prefill ms/call | wall s (median) | prefix breaks | tool err |
+|---|---|---|---|---|---|---|---|---|---|---|
+| crash_more | 4 | 100% (51%–100%) | 100% | 6.5 | 13,180 | 71% | 7,140 | 204 | 0.0 | 5% |
+
+## Crash recovery
+
+| config | crashed trials | finished after resume | passed | extra messages sent |
+|---|---|---|---|---|
+| crash_more | 4 | 100% | 100% | 0 |
+
+## crash_more: per task
+
+| task | passed | median steps | median wall s | failures |
+|---|---|---|---|---|
+| core/fix-off-by-one | 4/4 | 6 | 204 | – |
+

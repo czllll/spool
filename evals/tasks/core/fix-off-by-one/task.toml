@@ -1,0 +1,3 @@
+prompt = "The tests in test_stats.py are failing. Find and fix the bug in stats.py so that `python3 test_stats.py` prints 'all tests passed'. Do not modify test_stats.py."
+max_steps = 15
+tags = ["code", "debug"]

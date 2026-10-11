@@ -1,0 +1,3 @@
+prompt = "Convert users.json into users.csv with exactly the columns id,name,email,plan (in that order, with a header row), one row per user, sorted by id ascending."
+max_steps = 10
+tags = ["data"]

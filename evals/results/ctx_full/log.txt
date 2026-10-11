@@ -1,0 +1,56 @@
+[ctx_full] 12 trials to run (0 already done), concurrency 3
+[ctx_full] 1/12 long/log-incident t0 PASS (completed, 6 steps, 349s)
+[ctx_full] 2/12 long/todo-audit t0 fail (max_steps, 25 steps, 672s)
+[ctx_full] 3/12 long/wiki-research t0 PASS (completed, 7 steps, 375s)
+[ctx_full] 4/12 long/log-incident t1 PASS (completed, 7 steps, 288s)
+[ctx_full] 5/12 long/todo-audit t1 PASS (completed, 17 steps, 1043s)
+[ctx_full] 6/12 long/fix-calculator t0 fail (completed, 11 steps, 2297s)
+[ctx_full] 7/12 long/wiki-research t1 PASS (completed, 12 steps, 524s)
+[ctx_full] 8/12 long/log-incident t2 PASS (completed, 7 steps, 267s)
+[ctx_full] 9/12 long/fix-calculator t1 fail (timeout, 21 steps, 2400s)
+[ctx_full] 10/12 long/wiki-research t2 PASS (completed, 7 steps, 390s)
+[ctx_full] 11/12 long/todo-audit t2 fail (max_steps, 25 steps, 1136s)
+[ctx_full] 12/12 long/fix-calculator t2 PASS (completed, 23 steps, 2015s)
+# Eval: ctx_full
+
+- **ctx_full**: model `local`, 3 trials/task, config `evals/configs/ctx_full.toml`
+
+## Summary
+
+| config | trials | success (95% CI) | pass^3 | steps | input tok | cache reuse | prefill ms/call | wall s (median) | prefix breaks | tool err |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ctx_full | 12 | 67% (39%–86%) | 50% | 14.0 | 81,485 | 88% | 8,680 | 598 | 0.0 | 1% |
+
+## ctx_full: per task
+
+| task | passed | median steps | median wall s | failures |
+|---|---|---|---|---|
+| long/fix-calculator | 1/3 | 21 | 2297 | wrong_result_claimed_done×1, did_not_finish:timeout×1 |
+| long/log-incident | 3/3 | 7 | 288 | – |
+| long/todo-audit | 1/3 | 25 | 1043 | ran_out_of_steps×2 |
+| long/wiki-research | 3/3 | 7 | 390 | – |
+
+Failure categories: did_not_finish:timeout 1, ran_out_of_steps 2, wrong_result_claimed_done 1
+
+[ctx_full] 0 trials to run (12 already done), concurrency 3
+# Eval: ctx_full
+
+- **ctx_full**: model `local`, 3 trials/task, config `evals/configs/ctx_full.toml`
+
+## Summary
+
+| config | trials | success (95% CI) | pass^3 | steps | input tok | cache reuse | prefill ms/call | wall s (median) | prefix breaks | tool err |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ctx_full | 12 | 67% (39%–86%) | 50% | 14.0 | 81,485 | 88% | 8,680 | 598 | 0.0 | 1% |
+
+## ctx_full: per task
+
+| task | passed | median steps | median wall s | failures |
+|---|---|---|---|---|
+| long/fix-calculator | 1/3 | 21 | 2297 | wrong_result_claimed_done×1, did_not_finish:timeout×1 |
+| long/log-incident | 3/3 | 7 | 288 | – |
+| long/todo-audit | 1/3 | 25 | 1043 | ran_out_of_steps×2 |
+| long/wiki-research | 3/3 | 7 | 390 | – |
+
+Failure categories: did_not_finish:timeout 1, ran_out_of_steps 2, wrong_result_claimed_done 1
+

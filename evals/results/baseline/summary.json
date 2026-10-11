@@ -1,0 +1,28 @@
+{
+  "trials": 48,
+  "tasks": 16,
+  "passed": 37,
+  "success_rate": 0.7708333333333334,
+  "ci95": [
+    0.6346046409154885,
+    0.8669230897101096
+  ],
+  "pass^3": 0.75,
+  "pass@3": 0.8125,
+  "mean_steps": 7.520833333333333,
+  "mean_input_tokens": 22529.895833333332,
+  "mean_output_tokens": 708.25,
+  "cache_reuse": 0.8379782418730668,
+  "mean_wall_s": 387.8880833333333,
+  "median_wall_s": 304.383,
+  "mean_prefill_ms_per_call": 5778.4375,
+  "prefix_breaks_per_session": 0,
+  "tool_error_rate": 0.009287925696594427,
+  "mean_cost_usd": 0.0,
+  "failures": {
+    "ran_out_of_steps": 5,
+    "did_not_finish:timeout": 5,
+    "wrong_result_claimed_done": 1
+  },
+  "policy_blocked_trials": 0
+}

@@ -1,0 +1,3 @@
+prompt = "Create a file named greeting.txt in the workspace containing exactly one line: Hello, Spool!"
+max_steps = 6
+tags = ["easy", "files"]

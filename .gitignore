@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.spool/
+.models/
+*.db
+*.db-wal
+*.db-shm
+evals/results/**/workspaces/
+evals/results/**/spool.db*
+dist/

@@ -1,0 +1,96 @@
+[unstable_prefix] 36 trials to run (0 already done), concurrency 3
+[unstable_prefix] 1/36 core/config-edit t0 PASS (completed, 5 steps, 189s)
+[unstable_prefix] 2/36 core/dedupe-emails t0 PASS (completed, 5 steps, 300s)
+[unstable_prefix] 3/36 core/greeting t0 PASS (completed, 2 steps, 111s)
+[unstable_prefix] 4/36 core/csv-region-totals t0 PASS (completed, 5 steps, 449s)
+[unstable_prefix] 5/36 core/fix-off-by-one t0 PASS (completed, 6 steps, 413s)
+[unstable_prefix] 6/36 core/implement-slugify t0 PASS (completed, 6 steps, 527s)
+[unstable_prefix] 7/36 core/json-to-csv t0 PASS (completed, 7 steps, 640s)
+[unstable_prefix] 8/36 core/rename-extensions t0 PASS (completed, 4 steps, 310s)
+[unstable_prefix] 9/36 core/log-error-counts t0 PASS (completed, 6 steps, 677s)
+[unstable_prefix] 10/36 core/word-frequency t0 PASS (completed, 6 steps, 370s)
+[unstable_prefix] 11/36 core/config-edit t1 PASS (completed, 5 steps, 216s)
+[unstable_prefix] 12/36 core/rename-function t0 fail (timeout, 13 steps, 900s)
+[unstable_prefix] 13/36 core/send-weekly-report t0 PASS (completed, 3 steps, 837s)
+[unstable_prefix] 14/36 core/fix-off-by-one t1 PASS (completed, 6 steps, 366s)
+[unstable_prefix] 15/36 core/greeting t1 PASS (completed, 2 steps, 152s)
+[unstable_prefix] 16/36 core/dedupe-emails t1 PASS (completed, 7 steps, 707s)
+[unstable_prefix] 17/36 core/csv-region-totals t1 fail (timeout, 5 steps, 900s)
+[unstable_prefix] 18/36 core/implement-slugify t1 PASS (completed, 5 steps, 640s)
+[unstable_prefix] 19/36 core/log-error-counts t1 PASS (completed, 5 steps, 506s)
+[unstable_prefix] 20/36 core/json-to-csv t1 PASS (completed, 6 steps, 668s)
+[unstable_prefix] 21/36 core/rename-extensions t1 PASS (completed, 4 steps, 253s)
+[unstable_prefix] 22/36 core/word-frequency t1 PASS (completed, 5 steps, 457s)
+[unstable_prefix] 23/36 core/send-weekly-report t1 PASS (completed, 3 steps, 679s)
+[unstable_prefix] 24/36 core/rename-function t1 fail (timeout, 10 steps, 900s)
+[unstable_prefix] 25/36 core/config-edit t2 PASS (completed, 5 steps, 332s)
+[unstable_prefix] 26/36 core/csv-region-totals t2 PASS (completed, 5 steps, 533s)
+[unstable_prefix] 27/36 core/greeting t2 PASS (completed, 2 steps, 51s)
+[unstable_prefix] 28/36 core/dedupe-emails t2 PASS (completed, 5 steps, 508s)
+[unstable_prefix] 29/36 core/json-to-csv t2 PASS (completed, 6 steps, 446s)
+[unstable_prefix] 30/36 core/fix-off-by-one t2 fail (timeout, 5 steps, 900s)
+[unstable_prefix] 31/36 core/implement-slugify t2 PASS (completed, 8 steps, 658s)
+[unstable_prefix] 32/36 core/rename-extensions t2 PASS (completed, 4 steps, 345s)
+[unstable_prefix] 33/36 core/log-error-counts t2 PASS (completed, 6 steps, 574s)
+[unstable_prefix] 34/36 core/word-frequency t2 PASS (completed, 6 steps, 477s)
+[unstable_prefix] 35/36 core/rename-function t2 fail (timeout, 11 steps, 900s)
+[unstable_prefix] 36/36 core/send-weekly-report t2 PASS (completed, 4 steps, 723s)
+# Eval: unstable_prefix
+
+- **unstable_prefix**: model `local`, 3 trials/task, config `evals/configs/unstable_prefix.toml`
+
+## Summary
+
+| config | trials | success (95% CI) | pass^3 | steps | input tok | cache reuse | prefill ms/call | wall s (median) | prefix breaks | tool err |
+|---|---|---|---|---|---|---|---|---|---|---|
+| unstable_prefix | 36 | 86% (71%–94%) | 75% | 5.5 | 12,248 | 8% | 20,599 | 507 | 4.5 | 0% |
+
+## unstable_prefix: per task
+
+| task | passed | median steps | median wall s | failures |
+|---|---|---|---|---|
+| core/config-edit | 3/3 | 5 | 216 | – |
+| core/csv-region-totals | 2/3 | 5 | 533 | did_not_finish:timeout×1 |
+| core/dedupe-emails | 3/3 | 5 | 508 | – |
+| core/fix-off-by-one | 2/3 | 6 | 413 | did_not_finish:timeout×1 |
+| core/greeting | 3/3 | 2 | 111 | – |
+| core/implement-slugify | 3/3 | 6 | 640 | – |
+| core/json-to-csv | 3/3 | 6 | 640 | – |
+| core/log-error-counts | 3/3 | 6 | 574 | – |
+| core/rename-extensions | 3/3 | 4 | 310 | – |
+| core/rename-function | 0/3 | 11 | 900 | did_not_finish:timeout×3 |
+| core/send-weekly-report | 3/3 | 3 | 723 | – |
+| core/word-frequency | 3/3 | 6 | 457 | – |
+
+Failure categories: did_not_finish:timeout 5
+
+[unstable_prefix] 0 trials to run (36 already done), concurrency 3
+# Eval: unstable_prefix
+
+- **unstable_prefix**: model `local`, 3 trials/task, config `evals/configs/unstable_prefix.toml`
+
+## Summary
+
+| config | trials | success (95% CI) | pass^3 | steps | input tok | cache reuse | prefill ms/call | wall s (median) | prefix breaks | tool err |
+|---|---|---|---|---|---|---|---|---|---|---|
+| unstable_prefix | 36 | 86% (71%–94%) | 75% | 5.5 | 12,248 | 8% | 20,599 | 507 | 4.5 | 0% |
+
+## unstable_prefix: per task
+
+| task | passed | median steps | median wall s | failures |
+|---|---|---|---|---|
+| core/config-edit | 3/3 | 5 | 216 | – |
+| core/csv-region-totals | 2/3 | 5 | 533 | did_not_finish:timeout×1 |
+| core/dedupe-emails | 3/3 | 5 | 508 | – |
+| core/fix-off-by-one | 2/3 | 6 | 413 | did_not_finish:timeout×1 |
+| core/greeting | 3/3 | 2 | 111 | – |
+| core/implement-slugify | 3/3 | 6 | 640 | – |
+| core/json-to-csv | 3/3 | 6 | 640 | – |
+| core/log-error-counts | 3/3 | 6 | 574 | – |
+| core/rename-extensions | 3/3 | 4 | 310 | – |
+| core/rename-function | 0/3 | 11 | 900 | did_not_finish:timeout×3 |
+| core/send-weekly-report | 3/3 | 3 | 723 | – |
+| core/word-frequency | 3/3 | 6 | 457 | – |
+
+Failure categories: did_not_finish:timeout 5
+

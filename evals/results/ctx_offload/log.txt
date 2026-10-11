@@ -1,0 +1,56 @@
+[ctx_offload] 12 trials to run (0 already done), concurrency 3
+[ctx_offload] 1/12 long/log-incident t0 PASS (completed, 7 steps, 313s)
+[ctx_offload] 2/12 long/todo-audit t0 fail (completed, 19 steps, 1049s)
+[ctx_offload] 3/12 long/wiki-research t0 fail (max_steps, 20 steps, 1097s)
+[ctx_offload] 4/12 long/log-incident t1 PASS (completed, 9 steps, 441s)
+[ctx_offload] 5/12 long/fix-calculator t0 fail (timeout, 11 steps, 2400s)
+[ctx_offload] 6/12 long/todo-audit t1 fail (max_steps, 25 steps, 739s)
+[ctx_offload] 7/12 long/wiki-research t1 fail (max_steps, 20 steps, 715s)
+[ctx_offload] 8/12 long/fix-calculator t1 fail (timeout, 16 steps, 2400s)
+[ctx_offload] 9/12 long/log-incident t2 PASS (completed, 8 steps, 355s)
+[ctx_offload] 10/12 long/todo-audit t2 PASS (completed, 15 steps, 846s)
+[ctx_offload] 11/12 long/wiki-research t2 fail (max_steps, 20 steps, 886s)
+[ctx_offload] 12/12 long/fix-calculator t2 fail (completed, 20 steps, 2223s)
+# Eval: ctx_offload
+
+- **ctx_offload**: model `local`, 3 trials/task, config `evals/configs/ctx_offload.toml`
+
+## Summary
+
+| config | trials | success (95% CI) | pass^3 | steps | input tok | cache reuse | prefill ms/call | wall s (median) | prefix breaks | tool err |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ctx_offload | 12 | 33% (14%–61%) | 25% | 15.8 | 77,868 | 89% | 6,148 | 866 | 0.0 | 2% |
+
+## ctx_offload: per task
+
+| task | passed | median steps | median wall s | failures |
+|---|---|---|---|---|
+| long/fix-calculator | 0/3 | 16 | 2400 | did_not_finish:timeout×2, looping×1 |
+| long/log-incident | 3/3 | 8 | 355 | – |
+| long/todo-audit | 1/3 | 19 | 846 | wrong_result_claimed_done×1, ran_out_of_steps×1 |
+| long/wiki-research | 0/3 | 20 | 886 | ran_out_of_steps×3 |
+
+Failure categories: did_not_finish:timeout 2, looping 1, ran_out_of_steps 4, wrong_result_claimed_done 1
+
+[ctx_offload] 0 trials to run (12 already done), concurrency 3
+# Eval: ctx_offload
+
+- **ctx_offload**: model `local`, 3 trials/task, config `evals/configs/ctx_offload.toml`
+
+## Summary
+
+| config | trials | success (95% CI) | pass^3 | steps | input tok | cache reuse | prefill ms/call | wall s (median) | prefix breaks | tool err |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ctx_offload | 12 | 33% (14%–61%) | 25% | 15.8 | 77,868 | 89% | 6,148 | 866 | 0.0 | 2% |
+
+## ctx_offload: per task
+
+| task | passed | median steps | median wall s | failures |
+|---|---|---|---|---|
+| long/fix-calculator | 0/3 | 16 | 2400 | did_not_finish:timeout×2, looping×1 |
+| long/log-incident | 3/3 | 8 | 355 | – |
+| long/todo-audit | 1/3 | 19 | 846 | wrong_result_claimed_done×1, ran_out_of_steps×1 |
+| long/wiki-research | 0/3 | 20 | 886 | ran_out_of_steps×3 |
+
+Failure categories: did_not_finish:timeout 2, looping 1, ran_out_of_steps 4, wrong_result_claimed_done 1
+

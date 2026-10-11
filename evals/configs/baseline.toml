@@ -1,0 +1,11 @@
+name = "baseline"
+description = "Default harness: append-only context with large outputs offloaded to files, Rule of Two with auto-deny, Seatbelt sandbox."
+model = "local"
+temperature = 0.7
+max_output_tokens = 2048
+context_strategy = "offload"
+policy = "rule_of_two"
+approval = "auto_deny"
+sandbox = "auto"
+offload_when_over = 0.0   # fixed-threshold offloading, as in the recorded runs
+free_plan_steps = 0       # plan-only turns are charged, as in the recorded runs

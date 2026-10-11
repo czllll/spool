@@ -1,0 +1,11 @@
+name = "baseline_v3"
+description = "Failure 0002, harness-level fix: same as baseline, but up to 5 turns that only update the plan are not charged to max_steps."
+model = "local"
+temperature = 0.7
+max_output_tokens = 2048
+context_strategy = "offload"
+policy = "rule_of_two"
+approval = "auto_deny"
+sandbox = "auto"
+free_plan_steps = 5
+offload_when_over = 0.0   # fixed-threshold offloading, as in the recorded runs

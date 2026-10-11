@@ -1,0 +1,4 @@
+prompt = "Find every function in src/ whose body contains a TODO comment (TODO comments outside functions do not count). Write todo_report.md with one line per function, formatted as `path/to/file.py:function_name` with the path relative to the workspace, sorted alphabetically."
+max_steps = 25
+tags = ["long", "code"]
+timeout_s = 2400  # 40 minutes: ~2 tokens/s per slot with 3 sessions on one laptop

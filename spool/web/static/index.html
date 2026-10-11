@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spool</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="rail" aria-label="Sessions">
+      <div class="rail-head">
+        <h1 class="brand">Spool</h1>
+        <button class="btn btn-primary" id="new-task" type="button">New task</button>
+      </div>
+      <ul class="session-list" id="session-list"></ul>
+    </aside>
+
+    <main class="ledger" aria-label="Session">
+      <header class="ledger-head" id="ledger-head" hidden>
+        <h2 class="task-title" id="task-title"></h2>
+        <dl class="run-facts" id="run-facts"></dl>
+      </header>
+
+      <section class="intro" id="intro">
+        <h2>What should the agent do?</h2>
+        <p>It works in its own folder, with no network for shell commands. Every step is written to a log
+          first, so you can leave, come back, branch from any step, or resume after a crash.</p>
+      </section>
+
+      <ol class="entries" id="entries" aria-live="polite"></ol>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <label class="visually-hidden" for="composer-text">Task or message</label>
+        <textarea id="composer-text" rows="3" placeholder="Describe a task, e.g. The tests in test_stats.py fail. Fix stats.py so they pass."></textarea>
+        <div class="composer-options" id="composer-options">
+          <label>When an action needs approval
+            <select id="opt-approval">
+              <option value="human">Ask me</option>
+              <option value="auto_deny">Block it</option>
+              <option value="auto_approve">Allow it</option>
+            </select>
+          </label>
+          <label>Context
+            <select id="opt-context">
+              <option value="offload">Save long output to files when needed</option>
+              <option value="full">Keep full history</option>
+              <option value="fold">Fold old output (recallable)</option>
+              <option value="summarize">Summarize old steps</option>
+            </select>
+          </label>
+          <label class="grow">Folder
+            <input id="opt-workspace" type="text" placeholder="Optional; a new empty folder is used otherwise">
+          </label>
+        </div>
+        <div class="composer-actions">
+          <span class="composer-hint" id="composer-hint"></span>
+          <button class="btn" id="stop" type="button" hidden>Stop</button>
+          <button class="btn btn-primary" id="submit" type="submit">Start task</button>
+        </div>
+      </form>
+    </main>
+
+    <aside class="inspector" aria-label="Details">
+      <section class="panel" id="panel-session" hidden>
+        <h3>Session</h3>
+        <p class="status-line" id="status-line" role="status"></p>
+        <dl class="numbers" id="numbers"></dl>
+        <figure class="cache-chart" id="cache-chart" hidden>
+          <figcaption>Prompt tokens per step: reused from cache vs. computed</figcaption>
+          <div class="bars" id="bars"></div>
+        </figure>
+        <div class="risk" id="risk"></div>
+        <div class="panel-actions">
+          <button class="btn" id="resume" type="button" hidden>Resume</button>
+        </div>
+      </section>
+      <section class="panel" id="panel-files" hidden>
+        <h3>Folder</h3>
+        <nav class="crumbs" id="crumbs" aria-label="Folder path"></nav>
+        <ul class="files" id="files"></ul>
+        <pre class="file-view" id="file-view" hidden></pre>
+      </section>
+    </aside>
+  </div>
+  <script src="/static/app.js" type="module"></script>
+</body>
+</html>

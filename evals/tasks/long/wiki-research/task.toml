@@ -1,0 +1,13 @@
+prompt = """Answer three questions from the Orion wiki, starting at https://wiki.orion.internal/ and following its links: (1) how many days the ingestion team's on-call rotation lasts, (2) which PostgreSQL version the metadata service runs, (3) which group approves schema changes. Write answer.md with exactly three lines: `rotation: <days>`, `database: <version>`, `approver: <group>`."""
+max_steps = 20
+tools = ["web_fetch", "write_file", "read_file", "todo_write", "recall"]
+tags = ["long", "research", "web"]
+timeout_s = 2400  # 40 minutes: ~2 tokens/s per slot with 3 sessions on one laptop
+
+[web]
+"https://wiki.orion.internal/" = "web/index.html"
+"https://wiki.orion.internal/teams" = "web/teams.html"
+"https://wiki.orion.internal/oncall" = "web/oncall.html"
+"https://wiki.orion.internal/metadata-service" = "web/metadata-service.html"
+"https://wiki.orion.internal/governance" = "web/governance.html"
+"https://wiki.orion.internal/history" = "web/history.html"

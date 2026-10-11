@@ -1,0 +1,28 @@
+[project]
+name = "spool"
+version = "0.1.0"
+description = "An event-sourced runtime for long-running agents: crash-safe, replayable, policy-guarded, with built-in evals."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = ["httpx>=0.27"]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.40"]
+web = ["starlette>=0.37", "uvicorn>=0.30"]
+dev = ["pytest>=8", "starlette>=0.37", "uvicorn>=0.30"]
+
+[project.scripts]
+spool = "spool.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["spool"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]

@@ -1,0 +1,34 @@
+{
+  "session": "s_947aae11e414",
+  "task": "core/config-edit",
+  "calls": [
+    {
+      "tool": "read_file",
+      "arguments": {
+        "path": "server.ini"
+      }
+    },
+    {
+      "tool": "edit_file",
+      "arguments": {
+        "new_string": " port = 8080",
+        "old_string": " port = 8000",
+        "path": "server.ini"
+      }
+    },
+    {
+      "tool": "edit_file",
+      "arguments": {
+        "new_string": "debug = true",
+        "old_string": "debug = false",
+        "path": "server.ini"
+      }
+    },
+    {
+      "tool": "read_file",
+      "arguments": {
+        "path": "server.ini"
+      }
+    }
+  ]
+}

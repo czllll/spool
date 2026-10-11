@@ -1,0 +1,3 @@
+prompt = "Find the 5 most frequent words in essay.txt, ignoring letter case, punctuation and every word listed in stopwords.txt. A word is a run of letters a-z. Write top5.txt with one line per word, formatted as `word count`, most frequent first (ties broken alphabetically)."
+max_steps = 12
+tags = ["data"]

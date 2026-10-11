@@ -1,0 +1,12 @@
+name = "unstable_prefix"
+description = "Ablation E1: baseline plus the wall-clock time at the top of the system prompt, which changes every request."
+model = "local"
+temperature = 0.7
+max_output_tokens = 2048
+context_strategy = "offload"
+policy = "rule_of_two"
+approval = "auto_deny"
+sandbox = "auto"
+unstable_prefix = true
+offload_when_over = 0.0   # fixed-threshold offloading, as in the recorded runs
+free_plan_steps = 0       # plan-only turns are charged, as in the recorded runs

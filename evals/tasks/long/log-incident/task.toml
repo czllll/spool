@@ -1,0 +1,4 @@
+prompt = "server.log is large (10,000 lines). Find the first request that failed with error code E1442. Write incident.json with these keys: request_id (the req= value of that line), user_id (its user= value), and user_error_count (the number of ERROR lines for that same user in the whole log)."
+max_steps = 25
+tags = ["long", "large-output"]
+timeout_s = 2400  # 40 minutes: ~2 tokens/s per slot with 3 sessions on one laptop
