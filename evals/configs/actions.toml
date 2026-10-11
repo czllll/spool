@@ -1,0 +1,9 @@
+name = "actions"
+description = "Actions suite: tools from MCP connectors to the demo services; approvals answered by a simulated user."
+model = "local"
+temperature = 0.7
+max_output_tokens = 2048
+context_strategy = "offload"
+policy = "rule_of_two"
+approval = "human"
+sandbox = "auto"

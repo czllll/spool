@@ -1,19 +1,24 @@
 # Spool
 
-**An event-sourced runtime for long-running agents.** Every step an agent takes is appended to a
-durable log *before* it has any effect. Crash recovery, human approval, replay, forking, context
-management and evaluation are all derived from that one log.
+**A self-hosted, always-on agent, built on an event-sourced runtime.** Routines start tasks on
+their own (on a schedule, when files arrive, or from a webhook); the agent acts on your services
+through MCP connectors; anything that sends, buys or deletes waits for your approval, and an
+approval nobody answers expires instead of running late. Every step is appended to a durable log
+*before* it has any effect, so crash recovery, exactly-once actions, replay, forking, context
+management and evaluation all come from that one log.
 
-Between August and September 2026, xAI (Grok Bot), Meta (the Muse agent), Manus (2.0 and Cue) and
-OpenAI (Dots) all shipped always-on agents: each gets its own computer, keeps working after the
-user leaves, and comes back only when it needs approval. A runtime for that kind of agent has to
-survive restarts without repeating side effects, wait hours for a human, explain afterwards exactly
-what the model saw, keep long contexts bounded and cache-friendly, and limit what a prompt
-injection can do. Spool is a small, readable implementation of that layer: about 5,000 lines of
-Python, no agent framework, 120 tests, and evals run on a local open model.
+Between August and September 2026, xAI (Grok Bot), Meta (the Muse agent), Manus and Qwen's task
+assistant all moved to this shape: an agent that keeps working after you leave, signs into your
+apps, and comes back only when it needs a decision. The hard parts are not the model calls. A
+background run must start exactly once per scheduled time even if the scheduler crashes; an email
+must go out once even if the process dies right after sending it; an approval asked at 3 a.m. must
+not be granted at 3 p.m.; every action must be explainable afterwards; and a prompt injection in
+an email must not be able to make the agent send your data out. Spool is a small, readable
+implementation of that layer: about 8,500 lines of Python, no agent framework, 187 tests, and evals
+run on a local open model.
 
-On top of the runtime sits a small product: a local web app where you give the agent a task, watch
-each step as it happens, approve or deny risky steps, browse its folder and branch from any step.
+The product is a local web app: give the agent a task or a routine, watch each step as it happens,
+answer approvals from one inbox, browse its folder, and branch from any step.
 
 ![Spool web app showing a recorded session: the step-by-step log in the middle, cache use per step and the agent's folder on the right](docs/images/web.png)
 
@@ -29,7 +34,11 @@ each step as it happens, approve or deny risky steps, browse its folder and bran
 | Sandboxes | macOS Seatbelt, hardened Docker, or plain process ([ADR 0005](docs/adr/0005-sandbox-backends.md)) | `tests/test_sandbox.py` |
 | Model gateway | OpenAI-compatible adapter with a hand-written streaming parser (llama.cpp, DashScope/Qwen, DeepSeek, Moonshot, OpenRouter, OpenAI); Anthropic via the official SDK; retries with jitter; session-to-slot pinning | `tests/test_models.py` |
 | Evals | outcome-graded tasks, pass@k / pass^k, failure taxonomy, ablation configs, resumable runs ([ADR 0006](docs/adr/0006-outcome-graded-evals.md)) | `evals/`, `scripts/run_evals.sh` |
-| Product UI | local web app (`spool web`): start tasks, follow every step live, allow or deny risky steps, branch, resume, browse the folder; the live view is the event log streamed over SSE, so reconnects and server restarts lose nothing | `tests/test_web.py` |
+| Routines | cron (DOM/DOW and daylight-saving rules), interval, new-file and webhook triggers; each scheduled time fires exactly once, even with a crash between "fired" and "started" or two schedulers on one store; misfire and overlap policies ([ADR 0008](docs/adr/0008-routines-are-event-streams.md)) | `tests/test_routines.py`, `tests/test_cron.py` |
+| Approvals that expire | unattended runs ask with a deadline; `decide(state, now)` expires it; a late "allow" is refused and the action never runs | `tests/test_approval_expiry.py` |
+| Connectors over MCP | hand-written client and server for both protocol eras (2025-11-25 handshake, 2026-07-28 stateless), interop-tested against the official SDK; tool lists snapshotted into the log; Rule-of-Two properties, always-ask and crash behaviour derived from MCP annotations; remote writes exactly once via a hidden idempotency key ([ADR 0009](docs/adr/0009-connectors-over-mcp.md)) | `tests/test_mcp.py`, `tests/test_connectors.py` |
+| Actions, audited from outside | demo mail, calendar and shop services (MCP over SQLite); after every eval trial their records are matched against the log: writes without approval, after expiry, untracked, duplicated | `tests/test_actions_suite.py`, E5 below |
+| Product UI | local web app (`spool web`): tasks and routines, every step live, one approvals inbox, branch, resume, browse the folder; the live view is the event log streamed over SSE, so reconnects and server restarts lose nothing | `tests/test_web.py` |
 | Also | sub-agents with taint roll-up, `sleep` + `spool tick`, HTML session viewer, SFT export, a Gym-style RL environment | tests |
 
 ## Quick start
@@ -54,24 +63,36 @@ spool resume <session>
 spool run "..." --model dashscope:qwen-plus          # any OpenAI-compatible provider
 spool run "..." --model anthropic:claude-opus-5-5    # pip install -e '.[anthropic]'
 
+export SPOOL_CONNECTORS=examples/connectors.toml   # demo mail, calendar and shop (MCP servers on SQLite)
+spool connectors                      # their tools, and the policy Spool derives for each
+spool run "Reply to Amy that Thursday works" --connector mail --approval human
+
+spool routine add morning-inbox --cron "0 9 * * 1-5" --connector mail \
+      --task "Read new mail and draft replies where one is needed"
+spool routine add receipts --watch inbox --pattern "*.pdf" --task "File these receipts: {files}"
+spool routine list                    # triggers, next run, last run
+spool daemon                          # fire routines and run due sessions (or `spool web`, or cron + `spool tick`)
+
 scripts/run_evals.sh                  # every number in evals/results/REPORT.md
 ```
 
 ## Architecture
 
 ```
-  web app (SSE)    CLI (run/resume/fork/approve)    eval runner (tasks x trials x configs)
-                 \              |                  /
+  web app (SSE, routines, approvals)   CLI / daemon / tick   eval runner (+ simulated approver)
+                 \                          |                    /
+     scheduler: routines ─ due(state, now, files) ─ write-ahead ROUTINE_FIRED ─ start session
+                 \                          |                    /
         ┌──────── Runtime: imperative shell ────────────────────────┐
-        │  Agent loop (pure): reduce(state, event), decide(state)   │
+        │  Agent loop (pure): reduce(state, event), decide(state,now)│
         │  executor: call model | authorize | run tool | wait | end │
         └──┬──────────────┬───────────────┬───────────────┬────────┘
-     context engine   model gateway   policy engine   tools + sandbox
-     (append-only,    (OpenAI-compat,  (Rule of Two,   (bash, files, web,
-      offload, fold)   Anthropic)       approvals)      send; Seatbelt/Docker)
-           │
-   ┌───────┴───── event log (SQLite, append-only, fsync per event) ─────┐
-   │  recovery · replay/verify · fork · HTML viewer · evals · SFT export │
+     context engine   model gateway   policy engine   tools + sandbox     connectors (MCP)
+     (append-only,    (OpenAI-compat,  (Rule of Two,   (bash, files;      (snapshot in log;
+      offload, fold)   Anthropic)       confirm, TTL)   Seatbelt/Docker)   idempotency keys)
+           │                                                                  │
+   ┌───────┴───── event log (SQLite, append-only, fsync per event) ─────┐   mail · calendar ·
+   │  recovery · replay/verify · fork · HTML viewer · evals · SFT export │   shop · any MCP server
    └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -141,7 +162,10 @@ spool/
   state.py decide.py          pure reducer and decision function
   runtime.py                  imperative shell: actions, write-ahead, recovery, sub-agents
   context.py replay.py        rendering, offload/fold/summarize, render verification
-  policy.py                   Rule of Two
+  policy.py                   Rule of Two, confirm
+  routines.py cron.py         routines, triggers, the scheduler; cron parsing
+  mcp/ connectors.py          MCP client and server (both eras); connector tools and their policy
+  services/                   demo MCP services (mail, calendar, shop) and the side-effect audit
   tools/                      built-in tools, schema validation, path jail, edit, side-effect ledger
   sandbox/                    process, Seatbelt, Docker
   models/                     neutral types, OpenAI-compatible + Anthropic adapters, SSE, retries,
@@ -150,9 +174,10 @@ spool/
   viewer.py export.py env.py  HTML timeline, SFT export, Gym-style environment
   web/                        product UI: Starlette app (runs, approvals, SSE log tail) + static page, no build step
   cli.py
-evals/  build_tasks.py tasks/ configs/ results/
+evals/  build_tasks.py tasks/ (core, long, actions) configs/ results/
+examples/  connectors.toml seeds/   demo services for `spool web`
 docs/   design.md adr/
-tests/  120 tests, offline
+tests/  187 tests, offline
 ```
 
 ## Testing
@@ -163,12 +188,20 @@ and `recall`, compaction, loop warnings, the policy matrix, path jail escapes, e
 ledger under concurrent processes, Seatbelt and Docker confinement (skipped when unavailable),
 streaming parsing with fragmented tool calls, retries, the Anthropic conversion, cassettes, the
 eval runner, the RL environment, the web app (an approval round trip over HTTP and SSE replay
-from `Last-Event-ID`) and the CLI. Every eval task's verifier is tested too: the
-untouched workspace must fail and a reference solution must pass.
+from `Last-Event-ID`) and the CLI. Routines are tested with a fake clock (exactly-once firing,
+racing schedulers, a crash between fire and start, misfire and overlap, webhooks, new files) and
+so are expiring approvals; MCP is tested in both protocol eras, against the official SDK in both
+directions, with timeouts and a crashing server. Every eval task's verifier is tested too: the
+untouched workspace must fail and a reference solution must pass; for the actions suite the
+reference agents run through the real runner, services, approver and audit, one of them with a
+real `SIGKILL` right after an order is placed.
 
 ## Limitations
 
-- Single node: one writer per session. Multi-writer fan-in needs Postgres or a lease.
+- Single node: one writer per session. Firing routines is safe with several schedulers on one store,
+  but running sessions is not leased yet, so two workers could resume the same interrupted session.
+- Connectors speak stdio only (no Streamable HTTP or OAuth), and the demo services stand in for real
+  accounts; any stdio MCP server can be plugged in, but credentials are that server's business.
 - Forks copy the workspace as it is now, not as it was at the fork point.
 - The Anthropic adapter is tested against a fake client only (no API key was available).
 - The policy limits the damage an injection can do; it does not detect injections.
@@ -185,3 +218,5 @@ untouched workspace must fail and a reference solution must pass.
 - Addy Osmani, [Agent harness engineering](https://addyosmani.com/blog/agent-harness-engineering/) (2026-04-19)
 - [Terminal-Bench 2.0 and Harbor](https://www.tbench.ai/news/announcement-2-0) (2025-11)
 - Yao et al., tau-bench (pass^k)
+- [Model Context Protocol specification](https://modelcontextprotocol.io/specification) (2025-11-25 and 2026-07-28)
+- xAI, [Introducing Grok Bot](https://x.ai/news/introducing-grok-bot) and its [approvals documentation](https://docs.x.ai/grok-bot/approvals-security-and-privacy) (2026-08)

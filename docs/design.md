@@ -29,13 +29,17 @@ per iteration and appends the events it produced; the in-memory `State` is advan
 | `model_response` | after each model call | message (content, tool_calls with raw argument strings, provider blocks), usage incl. cached tokens, latency, server timings, per-part request digests, render timestamp |
 | `model_error` | a call failed after retries | error, retriable, status |
 | `policy_decision` | before a tool runs | verdict (allow/deny/ask), rule, Rule-of-Two properties, reason |
-| `approval_requested` / `approval_decided` | `ask` verdicts | call id, reason, approver |
+| `approval_requested` / `approval_decided` | `ask` verdicts | call id, rule, reason, deadline (`expires_at`); approver, or `expired` |
 | `tool_started` | before the tool runs | arguments, idempotency key, call signature |
 | `tool_completed` | after the tool (or instead of it) | ok, kind (executed, deduplicated, invalid, denied, rejected, interrupted), output, offload path and preview, loop warning, plan reminder, todos, wake time, propagated taint |
 | `context_folded` | fold strategy, over budget | through_step |
 | `context_compacted` | summarize strategy, over budget | upto_seq, summary, usage |
 | `session_finished` | terminal | status (completed, failed, max_steps, budget_exhausted), answer, usage |
-| `note` | bookkeeping | woke, recovery |
+| `note` | bookkeeping | woke, recovery, `connector_tools` (the connector tool snapshot, section 13) |
+
+Routine streams (`routine:<name>`, section 12) have their own events: `routine_saved`,
+`routine_fired` (fire key, scheduled time, payload, the session it starts), `routine_skipped`,
+`routine_paused`, `routine_resumed`, `routine_deleted`.
 
 ## 3. Crash semantics
 
@@ -91,6 +95,11 @@ See ADR 0004. Properties per call: static per tool, plus path classification for
 (denied calls do not taint). Unknown tools and schema-invalid arguments are rejected before policy,
 with errors phrased for the model.
 
+Two rules, in order: `rule_of_two` (the call would complete the triple) and `confirm` (the tool
+asks every time: connector tools that send, buy or delete). Both map to a verdict through
+`approval` (human: ask, auto_deny: deny, auto_approve: allow). With `approval_ttl_s`, an `ask`
+carries a deadline; `decide` expires it (section 12).
+
 ## 7. Sandboxes
 
 See ADR 0005. The runtime asks the sandbox for its isolation level; the policy treats unsandboxed
@@ -135,4 +144,50 @@ plain HTML/CSS/JS, no build step).
   and Resume continues from the last recorded event, the same path as crash recovery.
 - **Folder** browsing goes through the same path jail as the file tools, and protected directories
   are not listed.
+- **Routines** and **Approvals** pages: the routines with their triggers, next run and recent runs
+  (run now, pause, edit, delete); every pending approval across sessions, with its deadline.
+- Unless read-only, the server runs the scheduler (section 12) every `tick_s` seconds and resumes
+  routine runs that a previous server left mid-way.
+- Static assets are linked with a content hash, so a browser never runs an old script against a
+  newer server.
 - The server binds to 127.0.0.1 and has no authentication: it is a local tool.
+
+## 12. Routines and the scheduler
+
+See ADR 0008. `spool/routines.py`:
+
+```
+ tick(now) ──► for each routine: replay stream ─► due(state, now, files) ─► fires
+                 fire ─► append ROUTINE_FIRED (expected seq; names session r-<name>-<n>)
+                      ─► Runtime.start(session)  (a crash in between is repaired next tick)
+           ──► store.due_sessions(now)  (wake-ups and lapsed approvals, one indexed query)
+           ──► run them (web server, `spool daemon`, or `spool tick` from cron)
+```
+
+| trigger | fires | key |
+|---|---|---|
+| cron | wall-clock schedule in the routine's time zone | `cron<i>:<scheduled time>` |
+| interval | every N seconds from when the routine was armed | `interval<i>:<scheduled time>` |
+| file | new paths matching a glob in a folder of the routine workspace | digest of the new files |
+| webhook | `POST /api/routines/<name>/fire` (JSON body = `{payload}`) | `Idempotency-Key` header |
+
+Runs use the routine's persistent workspace, render `{date} {time} {now} {files} {payload}` into
+the task, and default to `approval = human` with `approval_ttl_s = 600`.
+
+## 13. Connectors
+
+See ADR 0009. `spool/mcp/` (protocol), `spool/connectors.py` (tools and policy),
+`spool/services/` (demo servers and the audit).
+
+```
+first model call ─► ConnectorManager.snapshot(cfg.connectors) ─► NOTE connector_tools
+                    (tools/list on each server; schema minus idempotency_key; derived policy)
+later            ─► session_registry(state) = built-ins + tools from the NOTE
+call             ─► policy (rule_of_two, confirm) ─► TOOL_STARTED ─► tools/call with the
+                    call's idempotency key filled in ─► TOOL_COMPLETED
+crash            ─► ledgered: same key again (server dedupes); idempotent: re-run;
+                    otherwise: reported as interrupted
+```
+
+`spool connectors` prints, per tool, the Rule-of-Two properties, whether it asks every time, and
+its crash behaviour.
