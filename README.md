@@ -98,8 +98,8 @@ failure analysis is [docs/notes/failures.md](docs/notes/failures.md).
 | Baseline | 12 core tasks, 15-minute budget | 92% success (95% CI 78–97%), pass^3 92%, 77% of prompt tokens served from cache |
 | E1 prefix stability | same, plus the wall clock at the top of the system prompt | cache reuse 77% → 8%, prefill per call 6.0 s → 20.6 s, median task time 272 s → 507 s, success 92% → 86% (5 timeouts) |
 | E4 crash recovery | SIGKILL at a chosen point (incl. after a message was sent but before it was logged), resume in a new process | 8/8 trials finished and passed; exactly one message sent in every side-effect trial |
-| Replay | re-render every recorded request from the log | 1,515 requests, 0 digest mismatches |
-| E2 context strategy | 4 long tasks, 40-minute budget | full history 67%, summarize 58%, fixed-threshold offload 33%, fold 25% |
+| Replay | re-render every recorded request from the log | 1,869 requests, 0 digest mismatches |
+| E2 context strategy | 4 long tasks, 40-minute budget | full history 67%, summarize 58%, fixed-threshold offload 33%, fold 25%; budget-aware offload (new default) 67% |
 
 What the experiments changed in the harness:
 
@@ -107,17 +107,19 @@ What the experiments changed in the harness:
   `wiki-research` trials: the agent did read the saved files back (52 of 54), but paging through
   them used up the 20-step limit. Prompts never passed ~8k tokens of a 32k window, so offloading
   bought nothing. Offloading is now budget-aware (`offload_when_over`): outputs stay inline until
-  the projected prompt passes half the context budget. (Failure 0004.)
-- **A prompt fix did nothing; a harness fix is being measured.** `rename-function` failed 3/3 at the
-  step limit with the work already done, because the model rewrote its plan after every edit. Asking
-  it not to (baseline_v2) left plan updates at 8% of tool calls and success at 31/36. The harness now
-  lets a few plan-only turns go uncharged (`free_plan_steps`). (Failure 0002.)
+  the projected prompt passes half the context budget. Re-measured: 67% (8/12), the same as full
+  history, with `wiki-research` back to 3/3. On these tasks no output was offloaded at all (13
+  outputs over the threshold, none near the budget), so the new default behaves like full history
+  until a prompt actually grows. (Failure 0004.)
+- **A prompt fix did nothing; a harness fix worked.** `rename-function` failed 3/3 at the step limit
+  with the work already done, because the model rewrote its plan after every edit. Asking it not to
+  (baseline_v2) left plan updates at 8% of tool calls and success at 31/36. Letting a few plan-only
+  turns go uncharged (`free_plan_steps`, baseline_v3) took the task to 3/3; the core suite went to
+  32/36, within noise of the baseline's 33/36, and none of the remaining failures had plan-only
+  turns. (Failure 0002.)
 - **The first real trial found a tool bug.** The model copied a separator space from `read_file`'s
   line-number column into an edit, and the whitespace-tolerant matcher pasted it back. `read_file`
   now uses the `cat -n` layout and fuzzy edits re-indent the replacement. (Failure 0001.)
-
-Still running at the time of writing: `baseline_v3` (free plan steps) and `ctx_adaptive`
-(budget-aware offload); their rows will be added to the report when they finish.
 
 Two serving-level observations from the same runs:
 

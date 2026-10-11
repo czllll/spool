@@ -74,3 +74,8 @@ harness change it led to. Raw trajectories are next to this file.
   outputs above `hard_cap_chars` are always offloaded. The decision is made once per output and
   stored in the event, so the prompt stays append-only. Measured with `evals/configs/ctx_adaptive.toml`.
   The recorded runs pin `offload_when_over = 0.0`, so they reproduce exactly.
+- **Result (ctx_adaptive):** 8/12 (67%, 95% CI 39-86%), the same as full history; `wiki-research`
+  3/3. Thirteen outputs exceeded the 3,000-character threshold and none was offloaded, because no
+  prompt came near half the budget. The remaining failures are `fix-calculator` (two timeouts and
+  one completed-but-wrong run, also the weak task with full history) and one `todo-audit` trial at
+  the step limit. Kept as the default.

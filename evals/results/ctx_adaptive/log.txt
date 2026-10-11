@@ -1,0 +1,34 @@
+[ctx_adaptive] 12 trials to run (0 already done), concurrency 3
+[ctx_adaptive] 1/12 long/log-incident t0 PASS (completed, 7 steps, 467s)
+[ctx_adaptive] 2/12 long/todo-audit t0 fail (max_steps, 25 steps, 812s)
+[ctx_adaptive] 3/12 long/wiki-research t0 PASS (completed, 7 steps, 524s)
+[ctx_adaptive] 4/12 long/log-incident t1 PASS (completed, 9 steps, 431s)
+[ctx_adaptive] 5/12 long/todo-audit t1 PASS (completed, 18 steps, 953s)
+[ctx_adaptive] 6/12 long/fix-calculator t0 fail (timeout, 13 steps, 2400s)
+[ctx_adaptive] 7/12 long/wiki-research t1 PASS (completed, 10 steps, 447s)
+[ctx_adaptive] 8/12 long/fix-calculator t1 fail (timeout, 17 steps, 2400s)
+[ctx_adaptive] 9/12 long/log-incident t2 PASS (completed, 10 steps, 632s)
+[ctx_adaptive] 10/12 long/wiki-research t2 PASS (completed, 6 steps, 481s)
+[ctx_adaptive] 11/12 long/todo-audit t2 PASS (completed, 16 steps, 961s)
+[ctx_adaptive] 12/12 long/fix-calculator t2 fail (completed, 17 steps, 2144s)
+# Eval: ctx_adaptive
+
+- **ctx_adaptive**: model `local`, 3 trials/task, config `evals/configs/ctx_adaptive.toml`
+
+## Summary
+
+| config | trials | success (95% CI) | pass^3 | steps | input tok | cache reuse | prefill ms/call | wall s (median) | prefix breaks | tool err |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ctx_adaptive | 12 | 67% (39%–86%) | 50% | 12.9 | 62,365 | 89% | 8,789 | 722 | 0.0 | 0% |
+
+## ctx_adaptive: per task
+
+| task | passed | median steps | median wall s | failures |
+|---|---|---|---|---|
+| long/fix-calculator | 0/3 | 17 | 2400 | did_not_finish:timeout×2, looping×1 |
+| long/log-incident | 3/3 | 9 | 467 | – |
+| long/todo-audit | 2/3 | 18 | 953 | ran_out_of_steps×1 |
+| long/wiki-research | 3/3 | 7 | 481 | – |
+
+Failure categories: did_not_finish:timeout 2, looping 1, ran_out_of_steps 1
+
