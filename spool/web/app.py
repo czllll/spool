@@ -146,7 +146,8 @@ class SessionHub:
             "parent": dict(state.parent) if state.parent else None,
             "config": {"model": cfg.model, "sandbox": cfg.sandbox, "policy": cfg.policy, "approval": cfg.approval,
                        "approval_ttl_s": cfg.approval_ttl_s, "context_strategy": cfg.context_strategy,
-                       "max_steps": cfg.max_steps, "connectors": list(cfg.connectors), "memory": cfg.memory},
+                       "max_steps": cfg.max_steps, "connectors": list(cfg.connectors), "memory": cfg.memory,
+                       "skills": [s["name"] for s in state.skills]},
             "steps": steps,
             "next_seq": state.next_seq,
         }
@@ -241,6 +242,7 @@ def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, r
     async def server_config(request: Request) -> Response:
         return JSONResponse({"read_only": read_only, "model": base_config.model,
                              "connectors": runtime.connectors.names() if runtime.connectors else [],
+                             "skills": runtime.skills.names() if runtime.skills else [],
                              "scheduler": None if read_only or not tick_s else {"tick_s": tick_s, **scheduler_state}})
 
     def refuse_if_read_only() -> Response | None:
@@ -265,6 +267,8 @@ def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, r
         overrides: dict[str, Any] = {k: body[k] for k in ("approval", "context_strategy", "max_steps", "policy") if body.get(k)}
         if "memory" in body:
             overrides["memory"] = bool(body["memory"])
+        if "skills" in body:
+            overrides["skills"] = tuple(body["skills"] or ())
         if body.get("connectors"):
             known = set(runtime.connectors.names() if runtime.connectors else [])
             unknown = [c for c in body["connectors"] if c not in known]

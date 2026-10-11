@@ -1,0 +1,8 @@
+prompt = "Ravi emailed asking for 30 minutes next week (the week of 19 October 2026) to go over the Q3 numbers. Book it and let him know. Follow these house rules.\n\n# Scheduling meetings\n\n1. Read the request (the email, or the task) and note who, how long (30 minutes if not said) and which days.\n2. List the calendar for those days (`calendar__list_events`). A slot is free only if it overlaps nothing.\n3. Pick the earliest free slot inside the user's meeting hours (see below).\n   Never book outside them, even if asked for a specific time; propose the nearest allowed slot instead.\n4. Create the event with the title `<Person> / <topic>` (for example `Ravi / Q3 numbers`) and put the\n   meeting link in the notes.\n5. Reply to the person with the day, date and time, and the meeting link.\n\n# Meeting hours and links\n\n- Meetings: Monday to Thursday, 10:00-12:00 and 14:00-17:00 (local time). No meetings on Friday.\n- Default length: 30 minutes.\n- Meeting link for every meeting: https://meet.example.com/you-standup\n"
+connectors = ["mail", "calendar"]
+
+tools = ["todo_write", "read_file"]
+max_steps = 16
+tags = ["skills", "calendar", "mail"]
+[approver]
+default = "approve"

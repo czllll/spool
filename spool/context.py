@@ -60,6 +60,15 @@ def services_block(state: State) -> str:
     return SERVICES_NOTE.format(services="\n".join(lines))
 
 
+def skills_block(state: State) -> str:
+    """Names and descriptions of the skills the session may load (from the snapshot in the log)."""
+    if not state.skills:
+        return ""
+    from .skills import render_block
+
+    return render_block([dict(s) for s in state.skills])
+
+
 def memory_block(state: State) -> str:
     """What the session was shown from memory, from the snapshot in the log (empty without memory)."""
     if not state.memory_loaded:
@@ -71,7 +80,7 @@ def memory_block(state: State) -> str:
 
 def render(events: Sequence[Event], state: State, tool_schemas: list[dict[str, Any]], *, now: float) -> ModelRequest:
     cfg = state.config
-    system = (cfg.system_prompt or DEFAULT_SYSTEM_PROMPT) + services_block(state) + memory_block(state)
+    system = (cfg.system_prompt or DEFAULT_SYSTEM_PROMPT) + services_block(state) + skills_block(state) + memory_block(state)
     if cfg.unstable_prefix:
         system = f"Current time: {iso(now)}\n\n{system}"
     return ModelRequest(

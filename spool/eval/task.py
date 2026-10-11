@@ -42,6 +42,11 @@ class Task:
     overrides: dict[str, Any] = field(default_factory=dict)
     connectors: tuple[str, ...] = ()
     approver: dict[str, Any] = field(default_factory=dict)
+    skills: tuple[str, ...] = ()
+
+    @property
+    def skills_dirs(self) -> list[Path]:
+        return [d for d in (self.dir / "skills", self.dir.parent / "skills") if d.is_dir()]
 
     def approval(self, tool: str) -> str:
         """How the simulated user answers an approval request for `tool`."""
@@ -91,6 +96,7 @@ def load_task(task_dir: str | Path, suite_root: Path | None = None) -> Task:
         overrides=dict(raw.get("config") or {}),
         connectors=tuple(raw.get("connectors") or ()),
         approver=dict(raw.get("approver") or {}),
+        skills=tuple(raw.get("skills") or ()),
     )
 
 
@@ -104,7 +110,8 @@ def load_suite(path: str | Path, pattern: str | None = None) -> list[Task]:
         for child in sorted(path.iterdir()):
             if (child / "task.toml").exists():
                 tasks.append(load_task(child))
-            elif child.is_dir() and any((g / "task.toml").exists() for g in child.iterdir() if g.is_dir()):
+            elif child.is_dir() and child.name != "skills" and any(
+                    (g / "task.toml").exists() for g in child.iterdir() if g.is_dir()):
                 tasks.extend(load_suite(child))
     if pattern:
         tasks = [t for t in tasks if pattern in t.id]

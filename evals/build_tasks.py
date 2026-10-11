@@ -1033,9 +1033,81 @@ def actions() -> None:
     ''', services={"shop": SHOP}, **act)
 
 
+# ============================================================= skills suite
+# E6: the same scheduling request with and without the meeting-scheduler skill. The verifier checks
+# house rules only the skill knows: meeting hours, the title format, the meeting link.
+SKILL_SRC = Path(__file__).resolve().parents[1] / "examples" / "skills" / "meeting-scheduler"
+RAVI_NEXT_WEEK = {"id": "m6", "from": "Ravi Patel <ravi@work.example>", "subject": "30 min next week?",
+                  "date": "2026-10-14 17:30",
+                  "body": "Hi, could we get 30 minutes next week (the week of 19 October) to go over the Q3 numbers?\n\nRavi"}
+WEEK = {"events": [
+    {"id": "e1", "title": "Planning", "start": "2026-10-19T10:00", "end": "2026-10-19T12:00"},
+    {"id": "e2", "title": "1:1 with Sam", "start": "2026-10-19T14:00", "end": "2026-10-19T15:00"},
+    {"id": "e3", "title": "Dentist", "start": "2026-10-20T15:30", "end": "2026-10-20T16:00"},
+]}
+SCHEDULE_VERIFY = '''
+    from datetime import datetime
+    events = created_events()
+    if len(events) != 1:
+        fail(f"expected 1 new event, found {len(events)}")
+    e = events[0]
+    start, end = (datetime.strptime(e[k], "%Y-%m-%dT%H:%M") for k in ("start", "end"))
+    if not (datetime(2026, 10, 19) <= start < datetime(2026, 10, 24)):
+        fail(f"not in the week of 19 October: {e['start']}")
+    if start.weekday() > 3:
+        fail(f"booked on a {start:%A}; meetings are Monday to Thursday")
+    in_hours = (start.hour >= 10 and end <= start.replace(hour=12, minute=0)) or \\
+               (start.hour >= 14 and end <= start.replace(hour=17, minute=0))
+    if not in_hours or (end - start).seconds != 1800:
+        fail(f"{e['start']}-{e['end']} is not a 30-minute slot inside 10-12 or 14-17")
+    busy = rows("calendar", "SELECT start, end FROM events WHERE idempotency_key IS NULL")
+    if any(b["start"] < e["end"] and e["start"] < b["end"] for b in busy):
+        fail(f"{e['start']} overlaps an existing event")
+    if not re.match(r"ravi\\s*/\\s*\\S", e["title"].strip().lower()):
+        fail(f"title {e['title']!r} is not '<Person> / <topic>'")
+    if "meet.example.com/you-standup" not in (e["notes"] or ""):
+        fail("the meeting link is not in the event notes")
+    mails = [m for m in sent() if "ravi@work.example" in m["recipient"].lower()]
+    if len(mails) != 1 or start.strftime("%H:%M") not in mails[0]["body"]:
+        fail("Ravi was not told the time")
+    ok()
+'''
+
+
+def skills_suite() -> None:
+    suite = ROOT / "skills"
+    suite.mkdir(parents=True, exist_ok=True)
+    (suite / "connectors.toml").write_text(ACTIONS_CONNECTORS)
+    if (suite / "skills").exists():
+        shutil.rmtree(suite / "skills")
+    shutil.copytree(SKILL_SRC, suite / "skills" / "meeting-scheduler")
+    prompt = ("Ravi emailed asking for 30 minutes next week (the week of 19 October 2026) to go over the Q3 numbers. "
+              "Book it and let him know.")
+    seeds = {"mail": {"inbox": [RAVI_NEXT_WEEK, NEWSLETTER]}, "calendar": WEEK}
+    _, body = (SKILL_SRC / "SKILL.md").read_text().split("---\n", 2)[1:]
+    inline = prompt + " Follow these house rules.\\n\\n" + (body.strip() + "\n\n" + (SKILL_SRC / "reference.md").read_text()
+                                                             ).replace("`reference.md` in this skill's folder", "below"
+                                                             ).replace(" from `reference.md`", "").replace("\n", "\\n").replace('"', '\\"')
+    arms = (("schedule-with-skill", prompt, 'skills = ["meeting-scheduler"]'),
+            ("schedule-rules-in-prompt", inline, ""),
+            ("schedule-without-skill", prompt, ""))
+    for name, text, skills in arms:
+        task("skills", name, f'''
+            prompt = "{text}"
+            connectors = ["mail", "calendar"]
+            {skills}
+            tools = ["todo_write", "read_file"]
+            max_steps = 16
+            tags = ["skills", "calendar", "mail"]
+            [approver]
+            default = "approve"
+        ''', SCHEDULE_VERIFY, services=seeds, header=ACTIONS_HELPERS)
+
+
 if __name__ == "__main__":
     core()
     long_suite()
     actions()
+    skills_suite()
     n = sum(1 for _ in ROOT.rglob("task.toml"))
     print(f"wrote {n} tasks under {ROOT}")

@@ -15,7 +15,7 @@ from typing import Iterable
 
 from . import events as ev
 from .connectors import session_registry
-from .context import DEFAULT_SYSTEM_PROMPT, build_messages, services_block
+from .context import DEFAULT_SYSTEM_PROMPT, build_messages, memory_block, services_block, skills_block
 from .eval.runner import load_results
 from .models.openai_compat import OpenAICompatClient
 from .state import replay
@@ -30,7 +30,8 @@ def trajectory(events: list) -> dict:
     # Final assistant turn included: build from the whole log, not just up to the last request.
     wire = [OpenAICompatClient._wire_message(m) for m in build_messages(events, state)]
     return {
-        "messages": [{"role": "system", "content": (cfg.system_prompt or DEFAULT_SYSTEM_PROMPT) + services_block(state)},
+        "messages": [{"role": "system", "content": (cfg.system_prompt or DEFAULT_SYSTEM_PROMPT) + services_block(state)
+                      + skills_block(state) + memory_block(state)},
                      *wire],
         "tools": [{"type": "function", "function": t} for t in tools],
         "meta": {

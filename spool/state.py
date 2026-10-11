@@ -112,6 +112,8 @@ class State:
     connectors_loaded: bool = False
     connector_tools: tuple[Mapping[str, Any], ...] = ()      # recorded tool entries (connectors.tool_entry)
     connector_servers: Mapping[str, Mapping[str, Any]] = _EMPTY
+    skills_loaded: bool = False
+    skills: tuple[Mapping[str, Any], ...] = ()                   # name, description, files (skills.Skill.summary)
     memory_loaded: bool = False
     memory_items: tuple[Mapping[str, Any], ...] = ()
     memory_total: int = 0
@@ -241,6 +243,9 @@ def reduce(state: State, event: Event) -> State:
     if t == ev.NOTE:
         if d.get("kind") == "woke":
             return dataclasses.replace(s, wake_at=None, status="running")
+        if d.get("kind") == "skills":
+            return dataclasses.replace(s, skills_loaded=True,
+                                       skills=tuple(MappingProxyType(dict(k)) for k in d.get("skills") or ()))
         if d.get("kind") == "memory":
             # Memory written by a session that had read untrusted content carries that taint into this one.
             return dataclasses.replace(

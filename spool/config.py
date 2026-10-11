@@ -56,6 +56,7 @@ class AgentConfig:
     tool_timeout_s: float = 120.0
     tools: tuple[str, ...] | None = None   # allow-list of tool names; None = all built-ins
     connectors: tuple[str, ...] = ()       # MCP connectors whose tools this session gets (see connectors.py)
+    skills: tuple[str, ...] = ()           # Agent Skills the session may load ("*" = all installed; see skills.py)
     memory: bool = False                   # cross-session memory: a snapshot in the prompt, remember/search_memory
     memory_budget_chars: int = 2_000       # how much memory the snapshot may show (most relevant first)
     loop_window: int = 6

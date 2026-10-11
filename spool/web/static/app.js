@@ -372,6 +372,7 @@ const HANDLERS = {
     if (d.parent && d.parent.kind === "routine") facts.append(fact("Started by", `routine ${d.parent.routine}`));
     if ((cfg.connectors || []).length) facts.append(fact("Services", cfg.connectors.join(", ")));
     if (cfg.memory) facts.append(fact("Memory", "on"));
+    if ((cfg.skills || []).length) facts.append(fact("Skills", cfg.skills.includes("*") ? "all installed" : cfg.skills.join(", ")));
   },
 
   user_message(ev, d) {

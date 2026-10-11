@@ -138,6 +138,7 @@ class Runtime:
         crash_hook: Callable[[str, Mapping[str, Any]], None] | None = None,
         on_event: Callable[[Event], None] | None = None,
         connectors: ConnectorManager | None = None,
+        skills: Any = None,
     ) -> None:
         self.store = store
         self.model = model
@@ -151,6 +152,7 @@ class Runtime:
         self.crash_hook = crash_hook if crash_hook is not None else crash_hook_from_env()
         self.on_event = on_event
         self.connectors = connectors
+        self.skills = skills  # SkillLibrary or None
         self.rulebook = RuleBook(store)
         self.memory = MemoryBook(store)
         self._handles: dict[str, _Handle] = {}
@@ -335,6 +337,12 @@ class Runtime:
         cfg = h.state.config
         if cfg.connectors and not h.state.connectors_loaded:
             await self._load_connectors(h)
+        if cfg.skills and not h.state.skills_loaded:
+            if self.skills is None:
+                h.append(ev.NOTE, {"kind": "skills", "skills": [],
+                                   "errors": {n: "no skills are installed in this process" for n in cfg.skills}})
+            else:
+                h.append(ev.NOTE, self.skills.snapshot(cfg.skills))
         if cfg.memory and not h.state.memory_loaded:
             h.append(ev.NOTE, memory_snapshot(self.memory, h.state.task, cfg.memory_budget_chars))
         schemas = self._registry(h).schemas()
@@ -439,6 +447,7 @@ class Runtime:
             now=self.clock,
             spawn=(lambda task, steps: self._spawn(h, call, task, steps)) if h.state.depth == 0 else None,
             memory=self.memory if cfg.memory else None,
+            skills=(self.skills, {s["name"] for s in h.state.skills}) if self.skills and h.state.skills else None,
             taint=h.state.taint,
         )
         started = time.perf_counter()

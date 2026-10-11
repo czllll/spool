@@ -48,7 +48,7 @@ from typing import Any, Mapping
 
 from .mcp import MCPClient, MCPError, result_text
 from .tools import PROP_EXTERNAL, PROP_SENSITIVE, PROP_UNTRUSTED, ToolContext, ToolRegistry, ToolResult, ToolSpec
-from .tools.builtin import DEFAULT_TOOLS, MEMORY_SPECS
+from .tools.builtin import DEFAULT_TOOLS, MEMORY_SPECS, SKILL_SPECS
 
 IDEM_ARG = "idempotency_key"
 SCOPES = ("shared", "session")
@@ -183,6 +183,8 @@ def session_registry(state: Any, builtin: ToolRegistry, handler_for: Any = None)
     base = builtin.subset(cfg.tools if cfg.tools is not None else DEFAULT_TOOLS)
     if cfg.memory:
         base = base.merged([s for s in MEMORY_SPECS if base.get(s.name) is None])
+    if state.skills:
+        base = base.merged([s for s in SKILL_SPECS if base.get(s.name) is None])
     if not state.connector_tools:
         return base
     return base.merged(connector_specs([dict(e) for e in state.connector_tools], handler_for))

@@ -38,6 +38,7 @@ from ..replay import verify_render
 from ..models.scripted import ScriptedModel
 from ..runtime import Runtime
 from ..services.audit import audit
+from ..skills import SkillLibrary
 from ..state import State, replay
 from ..store import EventStore
 from ..tools.ledger import Ledger
@@ -142,11 +143,14 @@ async def run_trial(task: Task, trial: int, spec: EvalSpec, store: EventStore, m
         overrides["tools"] = task.tools
     if task.connectors:
         overrides["connectors"] = task.connectors
+    if task.skills:
+        overrides["skills"] = task.skills
     cfg = spec.config.replace(**overrides)
 
     connectors_file = task.connectors_file if task.connectors else None
     manager = ConnectorManager.from_file(connectors_file, data_dir=out)
-    rt = Runtime(store, model, data_dir=out, crash_hook=None, connectors=manager)
+    skills = SkillLibrary(task.skills_dirs) if task.skills else None
+    rt = Runtime(store, model, data_dir=out, crash_hook=None, connectors=manager, skills=skills)
     sid = rt.start(task.prompt, config=cfg, workspace=ws, fixtures=task.fixtures())
     ledger_dir = rt.ledger_dir(sid)
     if (task.dir / "services").is_dir():  # each trial gets fresh services, seeded from the task
@@ -252,6 +256,8 @@ async def _drive_with_crashes(sid: str, crash: str, spec: EvalSpec, store: Event
     base = [sys.executable, "-m", "spool.cli", "--db", str(spec.out_dir / "spool.db"), "--data-dir", str(spec.out_dir)]
     if connectors_file is not None:
         base += ["--connectors", str(connectors_file)]
+    if task.skills and task.skills_dirs:
+        base += ["--skills", str(task.skills_dirs[0])]
     base += ["resume", sid, "--model", spec.model_spec, "--quiet"]
     deadline = time.monotonic() + task.timeout_s
     crashes = resumes = 0

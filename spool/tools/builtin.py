@@ -243,6 +243,22 @@ async def spawn_subagent(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
     return ToolResult(ok=True, output=header + "\nResult:\n" + truncate_middle(answer, 6000), data=data)
 
 
+# -------------------------------------------------------------------- skills
+async def load_skill(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    if ctx.skills is None:
+        return ToolResult.fail("no skills are available in this session")
+    library, allowed = ctx.skills
+    name = args["name"].strip()
+    if name not in allowed or name not in library.skills:
+        return ToolResult.fail(f"no skill named {name!r}; available: {', '.join(sorted(allowed)) or 'none'}")
+    skill = library.skills[name]
+    target = library.install(name, ctx.workspace)
+    files = sorted(str(p.relative_to(target)) for p in target.rglob("*") if p.is_file() and p.name != "SKILL.md")
+    listing = ("\n\nIts other files are in .skills/" + name + "/: " + ", ".join(files)) if files else ""
+    return ToolResult(ok=True, output=f"# Skill: {name}\n\n{skill.body.strip()}{listing}",
+                      data={"meta": {"skill": name, "path": str(target.relative_to(ctx.workspace))}})
+
+
 # -------------------------------------------------------------------- memory
 async def remember(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
     if ctx.memory is None:
@@ -398,6 +414,15 @@ BUILTIN_SPECS: list[ToolSpec] = [
             "max_steps": {"type": "integer", "description": "Step budget for the sub-agent."},
         }, ["task"]),
         handler=spawn_subagent,
+    ),
+]
+
+SKILL_SPECS: list[ToolSpec] = [
+    ToolSpec(
+        name="load_skill",
+        description="Load a skill's full instructions (and copy its files into .skills/<name>/ in the workspace).",
+        parameters=_obj({"name": {"type": "string", "description": "The skill's name, as listed."}}, ["name"]),
+        handler=load_skill,
     ),
 ]
 

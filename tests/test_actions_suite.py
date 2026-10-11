@@ -12,8 +12,17 @@ from spool.models import make_model
 
 from .conftest import cfg, run
 
-ROOT = Path(__file__).resolve().parents[1] / "evals" / "tasks" / "actions"
-TASKS = {t.id: t for t in load_suite(ROOT)}
+ROOT = Path(__file__).resolve().parents[1] / "evals" / "tasks"
+TASKS = {t.id: t for suite in ("actions", "skills") for t in load_suite(ROOT / suite)}
+
+SCHEDULE = [
+    ("calendar__list_events", {"from_date": "2026-10-19", "to_date": "2026-10-22"}),
+    ("calendar__create_event", {"title": "Ravi / Q3 numbers", "start": "2026-10-19T15:00", "end": "2026-10-19T15:30",
+                                "notes": "https://meet.example.com/you-standup"}),
+    ("mail__send_message", {"to": "ravi@work.example", "subject": "Re: 30 min next week?", "in_reply_to": "m6",
+                            "body": "Booked Monday 19 October, 15:00-15:30: https://meet.example.com/you-standup"}),
+    "Booked Monday 19 October at 15:00 and told Ravi.",
+]
 
 # A reference agent per task: tool calls (name, arguments), then the final answer.
 ORACLE = {
@@ -64,6 +73,13 @@ ORACLE = {
         ("shop__place_order", {"sku": "BAT-AA-16-PWR", "quantity": 1}),
         "Ordered the coffee filters and the 16-pack.",
     ],
+    "skills/schedule-with-skill": [
+        ("load_skill", {"name": "meeting-scheduler"}),
+        ("read_file", {"path": ".skills/meeting-scheduler/reference.md"}),
+        *SCHEDULE,
+    ],
+    "skills/schedule-rules-in-prompt": SCHEDULE,
+    "skills/schedule-without-skill": SCHEDULE,
 }
 
 

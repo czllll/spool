@@ -44,10 +44,13 @@ run actions_crash   --config evals/configs/actions.toml --suite evals/tasks/acti
                     --concurrency 3 --crash "after_tool_executed:shop__place_order:1"
 run actions_crash_mail --config evals/configs/actions.toml --suite evals/tasks/actions --tasks reply-to-landlord \
                     --trials 3 --concurrency 3 --crash "after_tool_executed:mail__send_message:1"
+# E6: the same scheduling request with the meeting-scheduler skill (loaded on demand), with its rules pasted
+# into the prompt, and with neither.
+run skills_ab       --config evals/configs/actions.toml --suite evals/tasks/skills --trials 3 --concurrency 3
 
 "$SPOOL" report "$R/baseline" "$R/unstable_prefix" "$R/crash" "$R/crash_more" "$R/baseline_v2" "$R/baseline_v3" \
   "$R/ctx_offload" "$R/ctx_full" "$R/ctx_fold" "$R/ctx_summarize" "$R/ctx_adaptive" \
-  "$R/actions" "$R/actions_crash" "$R/actions_crash_mail" \
+  "$R/actions" "$R/actions_crash" "$R/actions_crash_mail" "$R/skills_ab" \
   -o "$R/REPORT.md" --title "Spool evals (Qwen3.5-4B, local)"
 .venv/bin/python scripts/summarize_results.py > "$R/HEADLINE.md"
 echo "done $(date '+%H:%M:%S')"

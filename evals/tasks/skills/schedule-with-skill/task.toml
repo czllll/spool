@@ -1,0 +1,8 @@
+prompt = "Ravi emailed asking for 30 minutes next week (the week of 19 October 2026) to go over the Q3 numbers. Book it and let him know."
+connectors = ["mail", "calendar"]
+skills = ["meeting-scheduler"]
+tools = ["todo_write", "read_file"]
+max_steps = 16
+tags = ["skills", "calendar", "mail"]
+[approver]
+default = "approve"

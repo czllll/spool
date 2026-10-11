@@ -45,6 +45,7 @@ class ToolContext:
     now: Callable[[], float]
     spawn: Callable[[str, int], Awaitable[dict[str, Any]]] | None = None
     memory: Any = None                       # MemoryBook, when the session has memory
+    skills: Any = None                       # (SkillLibrary, names this session may load), when it has skills
     taint: frozenset[str] = frozenset()      # the session's taint when the call started
 
 

@@ -17,6 +17,7 @@
     spool connectors [NAME...]      the configured MCP connectors' tools and the policy for each
     spool rules [add allow|ask|deny TOOL [--arg k=GLOB] | rm ID]   standing approval rules
     spool memory [add TEXT | review ID | forget ID]                 what the agent remembers across sessions
+    spool skills                    installed Agent Skills (global: --skills DIR; per session: --skill NAME|*)
     (global: --connectors FILE; per session: --connector NAME)
 """
 
@@ -66,6 +67,8 @@ def explicit_overrides(args: argparse.Namespace) -> dict[str, Any]:
         changes["connectors"] = tuple(dict.fromkeys(args.connector))
     if getattr(args, "memory", False):
         changes["memory"] = True
+    if getattr(args, "skill", None):
+        changes["skills"] = tuple(dict.fromkeys(args.skill))
     return changes
 
 
@@ -158,9 +161,18 @@ def _connectors(args):
     return ConnectorManager.from_file(path, data_dir=args.data_dir)
 
 
+def _skills(args):
+    from .skills import SkillLibrary
+
+    dirs = [d for d in (getattr(args, "skills", None), os.environ.get("SPOOL_SKILLS"),
+                        str(Path(args.data_dir) / "skills")) if d]
+    library = SkillLibrary(dirs)
+    return library if library.skills else None
+
+
 def _runtime(args, store: EventStore, model_spec: str) -> Runtime:
     return Runtime(store, make_model(model_spec), data_dir=args.data_dir, on_event=_printer(args.quiet),
-                   connectors=_connectors(args))
+                   connectors=_connectors(args), skills=_skills(args))
 
 
 def _session_model(store: EventStore, sid: str, override: str | None) -> str:
@@ -245,6 +257,21 @@ def cmd_rules(args) -> int:
     except (RuleError, KeyError, ValueError) as exc:
         raise SystemExit(str(exc).strip("'\""))
     return 0
+
+
+def cmd_skills(args) -> int:
+    from .skills import SkillLibrary
+
+    dirs = [d for d in (args.skills, os.environ.get("SPOOL_SKILLS"), str(Path(args.data_dir) / "skills")) if d]
+    library = SkillLibrary(dirs)
+    for name in library.names():
+        skill = library.skills[name]
+        print(f"{name:<24} {skill.description}\n{'':<24} {skill.path}")
+    for name, error in sorted(library.errors.items()):
+        print(f"{name:<24} NOT LOADED: {error}")
+    if not library.skills and not library.errors:
+        print(f"no skills found in {', '.join(dirs)}")
+    return 1 if library.errors else 0
 
 
 def cmd_memory(args) -> int:
@@ -505,7 +532,11 @@ def cmd_web(args) -> int:
         raise SystemExit("the web app needs its extra: pip install -e '.[web]'")
     store = _store(args)
     cfg = build_config(args)
-    runtime = Runtime(store, make_model(cfg.model), data_dir=args.data_dir, connectors=_connectors(args))
+    skills = _skills(args)
+    if skills is not None and not cfg.skills:
+        cfg = cfg.replace(skills=("*",))  # progressive loading: listing every skill costs a line each
+    runtime = Runtime(store, make_model(cfg.model), data_dir=args.data_dir, connectors=_connectors(args),
+                      skills=skills)
     app = create_app(runtime, default_config=cfg, read_only=args.read_only)
     mode = "read-only, " if args.read_only else ""
     print(f"Spool is running at http://{args.host}:{args.port}  ({mode}model: {cfg.model}, data: {args.data_dir})")
@@ -568,6 +599,7 @@ def _add_config_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--tools", help="comma-separated tool allow-list")
     p.add_argument("--connector", action="append", metavar="NAME", help="give the session a connector's tools (repeatable)")
     p.add_argument("--memory", action="store_true", help="give the session cross-session memory")
+    p.add_argument("--skill", action="append", metavar="NAME", help="a skill the session may load, or * for all")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -575,6 +607,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-dir", default=os.environ.get("SPOOL_HOME", ".spool"))
     parser.add_argument("--db", help="event store path (default: <data-dir>/spool.db)")
     parser.add_argument("--connectors", help="connector definitions (default: $SPOOL_CONNECTORS or <data-dir>/connectors.toml)")
+    parser.add_argument("--skills", help="a directory of Agent Skills (also $SPOOL_SKILLS and <data-dir>/skills)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("run", help="start a session and run it")
@@ -605,6 +638,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--always", action="store_true", help="also allow this tool from now on (confirmations only)")
     p.add_argument("--note")
     p.set_defaults(func=cmd_approve)
+
+    p = sub.add_parser("skills", help="list installed Agent Skills")
+    p.set_defaults(func=cmd_skills)
 
     p = sub.add_parser("memory", help="what the agent remembers across sessions")
     msub = p.add_subparsers(dest="memory_command")
