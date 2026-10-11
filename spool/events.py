@@ -60,7 +60,13 @@ ROUTINE_TYPES = frozenset(
 
 ROUTINE_STREAM_PREFIX = "routine:"
 
-ALL_TYPES = SESSION_TYPES | ROUTINE_TYPES
+# Standing approval rules (stream `policy:rules`, see spool.rules)
+RULE_ADDED = "rule_added"
+RULE_REMOVED = "rule_removed"
+POLICY_TYPES = frozenset({RULE_ADDED, RULE_REMOVED})
+POLICY_STREAM_PREFIX = "policy:"
+
+ALL_TYPES = SESSION_TYPES | ROUTINE_TYPES | POLICY_TYPES
 
 
 @dataclass(frozen=True)

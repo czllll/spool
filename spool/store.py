@@ -141,8 +141,12 @@ class EventStore:
         if session_id.startswith(ev.ROUTINE_STREAM_PREFIX):
             self._project_routine(session_id[len(ev.ROUTINE_STREAM_PREFIX):], seq, type, data, ts)
             return
-        if type in ev.ROUTINE_TYPES:
-            raise ValueError(f"{type} belongs in a routine stream, not in session {session_id}")
+        if session_id.startswith(ev.POLICY_STREAM_PREFIX):
+            if type not in ev.POLICY_TYPES:
+                raise ValueError(f"{type} does not belong in {session_id}")
+            return  # small; folded on read (spool.rules)
+        if type in ev.ROUTINE_TYPES or type in ev.POLICY_TYPES:
+            raise ValueError(f"{type} does not belong in session {session_id}")
         if type == ev.SESSION_STARTED:
             parent = data.get("parent") or {}
             self._conn.execute(

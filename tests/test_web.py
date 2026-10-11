@@ -212,3 +212,47 @@ def test_routines_api_run_now_webhook_and_inbox(tmp_path):
         assert client.get("/api/routines/morning").status_code == 404
         assert client.post("/api/routines/nope/run").status_code == 404
     store.close()
+
+
+def test_always_allow_from_an_approval(tmp_path):
+    from spool.tools import ToolRegistry, ToolResult, ToolSpec
+
+    async def ok(ctx, args):
+        return ToolResult(ok=True, output="sent")
+
+    send = ToolSpec("mail__send_message", "send", {"type": "object", "properties": {"to": {"type": "string"}}}, ok,
+                    confirm=True)
+    store = EventStore(tmp_path / "db.sqlite")
+    script = [call("mail__send_message", to="a@x.example", call_id="c1"), reply("one"),
+              call("mail__send_message", to="b@x.example", call_id="c2"), reply("two")]
+    rt = Runtime(store, ScriptedModel(script), tools=ToolRegistry([send]), data_dir=tmp_path / "data")
+    with TestClient(create_app(rt, default_config=cfg(tools=["mail__send_message"]), tick_s=None)) as client:
+        first = client.post("/api/sessions", json={"task": "send one", "approval": "human"}).json()["id"]
+        wait_for(client, first, lambda s: s["awaiting"] == "c1" and not s["running"])
+        assert client.get("/api/approvals").json()[0]["rule"] == "confirm"
+        answer = client.post(f"/api/sessions/{first}/approvals", json={"call_id": "c1", "approved": True, "always": True})
+        assert answer.status_code == 200
+        rules = client.get("/api/rules").json()
+        assert [(r["effect"], r["tool"]) for r in rules] == [("allow", "mail__send_message")]
+        assert rules[0]["text"] == "Always allow mail__send_message"
+        wait_for(client, first, lambda s: s["status"] == "finished" and not s["running"])
+        second = client.post("/api/sessions", json={"task": "send two", "approval": "human"}).json()["id"]
+        done = wait_for(client, second, lambda s: s["status"] == "finished" and not s["running"])
+        assert done["final"]["answer"] == "two"  # allowed by the rule, no approval asked
+        assert client.delete(f"/api/rules/{rules[0]['id']}").json() == {"removed": rules[0]["id"]}
+        assert client.get("/api/rules").json() == []
+        assert client.post("/api/rules", json={"effect": "sometimes", "tool": "x"}).status_code == 400
+    store.close()
+
+
+def test_always_allow_is_refused_for_rule_of_two_asks(app_and_client, tmp_path):
+    ws = tmp_path / "ws"
+    (ws / "secrets").mkdir(parents=True)
+    (ws / "secrets" / "token.txt").write_text("t")
+    script = [call("web_fetch", url="https://docs.example/a", call_id="c1"),
+              call("read_file", path="secrets/token.txt", call_id="c2"), reply("x")]
+    with app_and_client(script, tools=["web_fetch", "read_file"]) as client:
+        sid = client.post("/api/sessions", json={"task": "t", "approval": "human", "workspace": str(ws)}).json()["id"]
+        wait_for(client, sid, lambda s: s["awaiting"] == "c2" and not s["running"])
+        refused = client.post(f"/api/sessions/{sid}/approvals", json={"call_id": "c2", "approved": True, "always": True})
+        assert refused.status_code == 400 and client.get("/api/rules").json() == []

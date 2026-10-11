@@ -15,6 +15,7 @@
     spool export RESULTS_DIR... -o data.jsonl [--all]
     spool web [--port 8765] [--model local]     local web app: start tasks, watch them live, approve, branch
     spool connectors [NAME...]      the configured MCP connectors' tools and the policy for each
+    spool rules [add allow|ask|deny TOOL [--arg k=GLOB] | rm ID]   standing approval rules
     (global: --connectors FILE; per session: --connector NAME)
 """
 
@@ -207,8 +208,39 @@ def cmd_approve(args) -> int:
     from .models.scripted import ScriptedModel
 
     rt = Runtime(store, ScriptedModel([]), data_dir=args.data_dir)  # approving needs no model
+    if args.always and not args.deny:
+        state = rt.state(args.session)
+        verdict = state.verdicts.get(args.call_id) or {}
+        if verdict.get("rule") != "confirm":
+            raise SystemExit("only steps that ask every time can be always allowed; this one asks because of the "
+                             "Rule of Two (what the run has already read and accessed)")
+        rule = rt.rulebook.add("allow", verdict["tool"], note=f"from an approval in {args.session}")
+        print(f"added rule {rule.id}: {rule.describe()}")
     rt.approve(args.session, args.call_id, not args.deny, by=os.environ.get("USER", "user"), note=args.note or "")
     print(f"{'denied' if args.deny else 'approved'} {args.call_id}; continue with: spool resume {args.session}")
+    return 0
+
+
+def cmd_rules(args) -> int:
+    from .rules import RuleBook, RuleError
+
+    book = RuleBook(_store(args))
+    try:
+        if args.rules_command == "add":
+            pairs = dict(item.split("=", 1) for item in args.arg or [])
+            rule = book.add(args.effect, args.tool, pairs, args.note or "")
+            print(f"added {rule.id}: {rule.describe()}")
+        elif args.rules_command == "rm":
+            book.remove(args.id)
+            print(f"removed {args.id}")
+        else:
+            rules = book.rules()
+            for rule in rules:
+                print(f"{rule.id:<18} {rule.describe()}" + (f"  ({rule.note})" if rule.note else ""))
+            if not rules:
+                print("no standing rules; steps ask as the policy says")
+    except (RuleError, KeyError, ValueError) as exc:
+        raise SystemExit(str(exc).strip("'\""))
     return 0
 
 
@@ -541,8 +573,21 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("session")
     p.add_argument("call_id")
     p.add_argument("--deny", action="store_true")
+    p.add_argument("--always", action="store_true", help="also allow this tool from now on (confirmations only)")
     p.add_argument("--note")
     p.set_defaults(func=cmd_approve)
+
+    p = sub.add_parser("rules", help="standing approval rules: always allow, always ask, never")
+    rsub = p.add_subparsers(dest="rules_command")
+    r = rsub.add_parser("add")
+    r.add_argument("effect", choices=["allow", "ask", "deny"])
+    r.add_argument("tool", help="tool name or glob, e.g. mail__send_message or shop__*")
+    r.add_argument("--arg", action="append", metavar="NAME=GLOB", help="only when an argument matches (repeatable)")
+    r.add_argument("--note")
+    r = rsub.add_parser("rm")
+    r.add_argument("id")
+    rsub.add_parser("list")
+    p.set_defaults(func=cmd_rules)
 
     p = sub.add_parser("sessions", help="list sessions")
     p.add_argument("--limit", type=int, default=30)

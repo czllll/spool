@@ -181,3 +181,35 @@ def test_cli_approve_flow(tmp_path, capsys, workspace):
     done = [e.data for e in store.load(sid) if e.type == ev.TOOL_COMPLETED and e.data["call_id"] == "c2"][0]
     assert done["kind"] == "rejected"
     run(rt2.aclose())
+
+
+def test_cli_rules_and_always(tmp_path, capsys, workspace):
+    data = tmp_path / "data"
+    assert cli_main(["--data-dir", str(data), "rules"]) == 0
+    assert "no standing rules" in capsys.readouterr().out
+    assert cli_main(["--data-dir", str(data), "rules", "add", "deny", "shop__*", "--note", "no shopping"]) == 0
+    added = capsys.readouterr().out
+    assert "Never allow shop__*" in added
+    rule_id = added.split()[1].rstrip(":")
+    assert cli_main(["--data-dir", str(data), "rules", "add", "allow", "mail__send_message", "--arg", "to=*@corp.example"]) == 0
+    capsys.readouterr()
+    cli_main(["--data-dir", str(data), "rules", "list"])
+    listing = capsys.readouterr().out
+    assert listing.index("Never allow") < listing.index("Always allow mail__send_message where to is *@corp.example")
+    assert cli_main(["--data-dir", str(data), "rules", "rm", rule_id]) == 0
+    with pytest.raises(SystemExit):
+        cli_main(["--data-dir", str(data), "rules", "rm", rule_id])
+
+    # --always is refused for a Rule-of-Two ask
+    (workspace / "secrets").mkdir()
+    (workspace / "secrets" / "k.txt").write_text("v")
+    store = EventStore(data / "spool.db")
+    model = ScriptedModel([call("web_fetch", url="https://a.test/", call_id="c1"),
+                           call("read_file", path="secrets/k.txt", call_id="c2"), reply("done")])
+    rt = Runtime(store, model, data_dir=data)
+    sid = rt.start("t", config=cfg(tools=["web_fetch", "read_file"], approval="human"), workspace=workspace,
+                   fixtures={"web": {"https://a.test/": "page"}})
+    assert run(rt.run(sid)).status == "awaiting_approval"
+    run(rt.aclose())
+    with pytest.raises(SystemExit, match="Rule of Two"):
+        cli_main(["--data-dir", str(data), "approve", sid, "c2", "--always"])

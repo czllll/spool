@@ -30,6 +30,7 @@ from . import events as ev
 from . import policy
 from .config import AgentConfig
 from .connectors import ConnectorManager, session_registry
+from .rules import RuleBook
 from .context import CHARS_PER_TOKEN, estimate_tokens, plan_compaction, plan_fold, render, summary_request
 from .decide import (
     Authorize,
@@ -148,6 +149,7 @@ class Runtime:
         self.crash_hook = crash_hook if crash_hook is not None else crash_hook_from_env()
         self.on_event = on_event
         self.connectors = connectors
+        self.rulebook = RuleBook(store)
         self._handles: dict[str, _Handle] = {}
 
     # ---------------------------------------------------------------- sessions
@@ -385,7 +387,8 @@ class Runtime:
             })
             return
         isolation = self._sandbox(h).isolation
-        h.append(ev.POLICY_DECISION, policy.evaluate(call, spec, h.state, isolation=isolation))
+        h.append(ev.POLICY_DECISION, policy.evaluate(call, spec, h.state, isolation=isolation,
+                                                     rules=self.rulebook.rules()))
 
     def _sandbox(self, h: _Handle) -> Sandbox:
         if h.sandbox is None:

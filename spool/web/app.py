@@ -35,6 +35,7 @@ from .. import events as ev
 from ..config import AgentConfig
 from ..events import Event
 from ..routines import RoutineError, RoutineSpec, Scheduler, summarize_routine
+from ..rules import RuleError
 from ..runtime import ApprovalExpired, Runtime
 from ..state import replay
 from ..tools import PathError, relative_parts, resolve_path
@@ -358,9 +359,19 @@ def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, r
         except KeyError:
             return JSONResponse({"error": "No such session."}, status_code=404)
         body = await request.json()
+        rule = None
+        if body.get("always") and body.get("approved"):
+            # "Always allow" only replaces the per-call confirmation, never a Rule-of-Two ask.
+            state = runtime.state(sid)
+            verdict = state.verdicts.get(body.get("call_id") or "") or {}
+            if state.awaiting != body.get("call_id") or verdict.get("rule") != "confirm":
+                return JSONResponse({"error": "Only steps that ask every time can be always allowed. This one needs "
+                                              "approval because of what the run has already read and accessed."},
+                                    status_code=400)
+            rule = runtime.rulebook.add("allow", verdict["tool"], note=f"from an approval in {sid}")
         try:
             runtime.approve(sid, body["call_id"], bool(body.get("approved")), by=body.get("by") or "web",
-                            note=body.get("note") or "")
+                            note=body.get("note") or (f"always allow ({rule.id})" if rule else ""))
         except ApprovalExpired as exc:
             hub.start(sid)  # the expiry was recorded; let the agent finish its reply
             return JSONResponse({"error": "This approval expired before you answered, so the step did not run.",
@@ -372,6 +383,29 @@ def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, r
 
     async def approvals(request: Request) -> Response:
         return JSONResponse(pending_approvals(store))
+
+    async def list_rules(request: Request) -> Response:
+        return JSONResponse([{**r.to_dict(), "text": r.describe()} for r in runtime.rulebook.rules()])
+
+    async def add_rule(request: Request) -> Response:
+        if (refused := refuse_if_read_only()) is not None:
+            return refused
+        body = await request.json()
+        try:
+            rule = runtime.rulebook.add(body.get("effect", ""), body.get("tool", ""), body.get("args") or {},
+                                        body.get("note", ""))
+        except RuleError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse({**rule.to_dict(), "text": rule.describe()}, status_code=201)
+
+    async def remove_rule(request: Request) -> Response:
+        if (refused := refuse_if_read_only()) is not None:
+            return refused
+        try:
+            runtime.rulebook.remove(request.path_params["rid"])
+        except KeyError:
+            return JSONResponse({"error": "No such rule."}, status_code=404)
+        return JSONResponse({"removed": request.path_params["rid"]})
 
     async def tick(request: Request) -> Response:
         """Run one scheduler pass now (the loop does this every tick_s)."""
@@ -545,6 +579,9 @@ def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, r
         Route("/api/sessions/{sid}/fork", post_fork, methods=["POST"]),
         Route("/api/sessions/{sid}/files", files, methods=["GET"]),
         Route("/api/approvals", approvals, methods=["GET"]),
+        Route("/api/rules", list_rules, methods=["GET"]),
+        Route("/api/rules", add_rule, methods=["POST"]),
+        Route("/api/rules/{rid}", remove_rule, methods=["DELETE"]),
         Route("/api/tick", tick, methods=["POST"]),
         Route("/api/routines", list_routines, methods=["GET"]),
         Route("/api/routines", save_routine, methods=["POST"]),

@@ -252,6 +252,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .approval-item .from a { color: var(--accent); }
 .approval-item .expiry { color: var(--amber); }
 .approval-item .actions { display: flex; gap: 0.5rem; }
+.rules { max-width: 46rem; margin-top: 1.8rem; border-top: 1px solid var(--rule); padding-top: 1rem; }
+.rules h3 { margin: 0 0 0.3rem; font-size: 1.1rem; font-weight: 600; }
+.rules .hint { margin: 0 0 0.6rem; font-size: 0.85rem; color: var(--muted); }
+.rule-list { list-style: none; margin: 0; padding: 0; }
+.rule-list li { display: flex; align-items: baseline; gap: 0.8rem; padding: 0.25rem 0; border-bottom: 1px solid var(--rule-soft); }
+.rule-list .text { flex: 1; font-size: 0.92rem; }
+.rule-list .note { color: var(--muted); font-size: 0.8rem; }
 
 /* --------------------------------------------------------------- composer */
 .composer { border-top: 1px solid var(--rule); background: var(--panel); padding: 0.8rem 2rem 1rem; }

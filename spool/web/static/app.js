@@ -116,6 +116,7 @@ function approvalWhy(rule, reason) {
       + "data and send data out. That combination can leak data if the agent was misled by something it read.";
   }
   if (rule === "confirm") return "This step sends, buys or changes something outside the agent's folder.";
+  if (rule === "user_rule") return "One of your standing rules asks you to approve steps like this.";
   return reason || "The policy asks for a person to decide on this step.";
 }
 
@@ -410,11 +411,14 @@ const HANDLERS = {
 
   policy_decision(ev, d) {
     const call = S.calls.get(d.call_id);
-    if (!call || d.verdict === "allow") return;
+    if (!call || (d.verdict === "allow" && d.rule !== "user_rule")) return;
     if (d.verdict === "deny") {
       call.root.className = "call denied";
       call.state.textContent = "blocked";
-      call.notes.append(el("p", { class: "note-line red", text: d.reason }));
+      const text = d.rule === "user_rule" && d.user_rule ? `Blocked by your rule: never allow ${d.user_rule.tool}.` : d.reason;
+      call.notes.append(el("p", { class: "note-line red", text }));
+    } else if (d.rule === "user_rule" && d.user_rule && d.user_rule.effect === "allow") {
+      call.notes.append(el("p", { class: "note-line", text: `Allowed by your rule for ${d.user_rule.tool}.` }));
     }
   },
 
@@ -423,10 +427,10 @@ const HANDLERS = {
     if (!call) return;
     call.root.className = "call awaiting";
     call.state.textContent = "needs your approval";
-    const decide = (approved) => async () => {
+    const decide = (approved, always = false) => async () => {
       box.querySelectorAll("button").forEach((b) => (b.disabled = true));
       try {
-        await api(`/api/sessions/${S.current}/approvals`, { method: "POST", body: { call_id: d.call_id, approved } });
+        await api(`/api/sessions/${S.current}/approvals`, { method: "POST", body: { call_id: d.call_id, approved, always } });
       } catch (err) {
         box.append(el("p", { class: "note-line red", text: err.message }));
         box.querySelectorAll("button").forEach((b) => (b.disabled = false));
@@ -436,7 +440,9 @@ const HANDLERS = {
       el("p", { text: `Allow this step? ${approvalWhy(d.rule || "rule_of_two", d.reason)}` }),
       d.expires_at ? el("p", { class: "note-line amber", text: `If nobody answers by ${clockTime(d.expires_at)}, it will not run.` }) : null,
       S.readOnly ? null : el("div", { class: "actions" },
-        el("button", { class: "btn btn-primary", type: "button", text: "Allow", onclick: decide(true) }),
+        el("button", { class: "btn btn-primary", type: "button", text: "Allow once", onclick: decide(true) }),
+        d.rule === "confirm" ? el("button", { class: "btn", type: "button", text: `Always allow ${d.tool}`,
+          onclick: decide(true, true) }) : null,
         el("button", { class: "btn btn-danger", type: "button", text: "Deny", onclick: decide(false) })));
     call.approval = box;
     call.notes.append(box);
@@ -780,10 +786,10 @@ function renderApprovals(items) {
   if (!items.length) list.append(el("li", { class: "empty-line", text: "Nothing is waiting for you." }));
   for (const a of items) {
     const item = el("li", { class: "approval-item" });
-    const decide = (approved) => async () => {
+    const decide = (approved, always = false) => async () => {
       item.querySelectorAll("button").forEach((b) => (b.disabled = true));
       try {
-        await api(`/api/sessions/${a.session_id}/approvals`, { method: "POST", body: { call_id: a.call_id, approved } });
+        await api(`/api/sessions/${a.session_id}/approvals`, { method: "POST", body: { call_id: a.call_id, approved, always } });
       } catch (err) {
         item.append(el("p", { class: "note-line red", text: err.message }));
       }
@@ -800,10 +806,28 @@ function renderApprovals(items) {
         el("span", { text: `Asked ${when(a.requested_at)}` }),
         a.expires_at ? el("span", { class: "expiry", text: `Skipped at ${clockTime(a.expires_at)} if nobody answers` }) : null),
       S.readOnly ? null : el("div", { class: "actions" },
-        el("button", { class: "btn btn-primary", type: "button", text: "Allow", onclick: decide(true) }),
+        el("button", { class: "btn btn-primary", type: "button", text: "Allow once", onclick: decide(true) }),
+        a.rule === "confirm" ? el("button", { class: "btn", type: "button", text: `Always allow ${a.tool}`,
+          onclick: decide(true, true) }) : null,
         el("button", { class: "btn btn-danger", type: "button", text: "Deny", onclick: decide(false) })));
     list.append(item);
   }
+  loadRules();
+}
+
+async function loadRules() {
+  const list = $("rule-list");
+  let rules = [];
+  try {
+    rules = await api("/api/rules");
+  } catch (_) { /* leave the list as it is */ }
+  list.replaceChildren(...rules.map((r) => el("li", {},
+    el("span", { class: "text", text: r.text }), r.note ? el("span", { class: "note", text: r.note }) : null,
+    S.readOnly ? null : el("button", { class: "btn-link", type: "button", text: "Remove", onclick: async () => {
+      await api(`/api/rules/${r.id}`, { method: "DELETE" }).catch(() => {});
+      loadRules();
+    } }))));
+  if (!rules.length) list.append(el("li", { class: "empty-line", text: "No standing rules." }));
 }
 
 // ---------------------------------------------------------------------- boot
