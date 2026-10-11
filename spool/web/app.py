@@ -146,7 +146,7 @@ class SessionHub:
             "parent": dict(state.parent) if state.parent else None,
             "config": {"model": cfg.model, "sandbox": cfg.sandbox, "policy": cfg.policy, "approval": cfg.approval,
                        "approval_ttl_s": cfg.approval_ttl_s, "context_strategy": cfg.context_strategy,
-                       "max_steps": cfg.max_steps, "connectors": list(cfg.connectors)},
+                       "max_steps": cfg.max_steps, "connectors": list(cfg.connectors), "memory": cfg.memory},
             "steps": steps,
             "next_seq": state.next_seq,
         }
@@ -262,7 +262,9 @@ def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, r
         task = (body.get("task") or "").strip()
         if not task:
             return JSONResponse({"error": "Describe the task first."}, status_code=400)
-        overrides = {k: body[k] for k in ("approval", "context_strategy", "max_steps", "policy") if body.get(k)}
+        overrides: dict[str, Any] = {k: body[k] for k in ("approval", "context_strategy", "max_steps", "policy") if body.get(k)}
+        if "memory" in body:
+            overrides["memory"] = bool(body["memory"])
         if body.get("connectors"):
             known = set(runtime.connectors.names() if runtime.connectors else [])
             unknown = [c for c in body["connectors"] if c not in known]
@@ -383,6 +385,34 @@ def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, r
 
     async def approvals(request: Request) -> Response:
         return JSONResponse(pending_approvals(store))
+
+    # -------------------------------------------------------------- memory
+    def memory_row(m: Any) -> dict[str, Any]:
+        return {**m.to_dict(), "unreviewed": bool(m.carries)}
+
+    async def list_memory(request: Request) -> Response:
+        return JSONResponse([memory_row(m) for m in reversed(runtime.memory.all())])
+
+    async def add_memory(request: Request) -> Response:
+        if (refused := refuse_if_read_only()) is not None:
+            return refused
+        body = await request.json()
+        try:  # a fact the person types in is reviewed by definition
+            memory, _ = runtime.memory.save(body.get("text") or "", source={"by": "user"}, reviewed=True)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(memory_row(memory), status_code=201)
+
+    def _memory_edit(action: str):
+        async def handler(request: Request) -> Response:
+            if (refused := refuse_if_read_only()) is not None:
+                return refused
+            try:
+                getattr(runtime.memory, action)(request.path_params["mid"])
+            except KeyError:
+                return JSONResponse({"error": "No such memory."}, status_code=404)
+            return JSONResponse({action: request.path_params["mid"]})
+        return handler
 
     async def list_rules(request: Request) -> Response:
         return JSONResponse([{**r.to_dict(), "text": r.describe()} for r in runtime.rulebook.rules()])
@@ -579,6 +609,10 @@ def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, r
         Route("/api/sessions/{sid}/fork", post_fork, methods=["POST"]),
         Route("/api/sessions/{sid}/files", files, methods=["GET"]),
         Route("/api/approvals", approvals, methods=["GET"]),
+        Route("/api/memory", list_memory, methods=["GET"]),
+        Route("/api/memory", add_memory, methods=["POST"]),
+        Route("/api/memory/{mid}/review", _memory_edit("review"), methods=["POST"]),
+        Route("/api/memory/{mid}", _memory_edit("forget"), methods=["DELETE"]),
         Route("/api/rules", list_rules, methods=["GET"]),
         Route("/api/rules", add_rule, methods=["POST"]),
         Route("/api/rules/{rid}", remove_rule, methods=["DELETE"]),

@@ -213,3 +213,16 @@ def test_cli_rules_and_always(tmp_path, capsys, workspace):
     run(rt.aclose())
     with pytest.raises(SystemExit, match="Rule of Two"):
         cli_main(["--data-dir", str(data), "approve", sid, "c2", "--always"])
+
+
+def test_cli_memory(tmp_path, capsys):
+    data = tmp_path / "data"
+    assert cli_main(["--data-dir", str(data), "memory"]) == 0
+    assert "nothing remembered" in capsys.readouterr().out
+    cli_main(["--data-dir", str(data), "memory", "add", "Ship orders to the office."])
+    mid = capsys.readouterr().out.split()[1]
+    cli_main(["--data-dir", str(data), "memory", "list"])
+    assert "Ship orders to the office.  (added by you)" in capsys.readouterr().out
+    assert cli_main(["--data-dir", str(data), "memory", "forget", mid]) == 0
+    with pytest.raises(SystemExit):
+        cli_main(["--data-dir", str(data), "memory", "forget", mid])

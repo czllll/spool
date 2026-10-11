@@ -128,7 +128,7 @@ const RUN_LABELS = {
 };
 
 // ------------------------------------------------------------------ views
-const PAGES = { routines: "page-routines", approvals: "page-approvals" };
+const PAGES = { routines: "page-routines", approvals: "page-approvals", memory: "page-memory" };
 
 function showView(view) {
   S.view = view;
@@ -148,6 +148,7 @@ function showView(view) {
   $("nav-sessions").setAttribute("aria-current", sessions ? "page" : "false");
   $("nav-routines").setAttribute("aria-current", view === "routines" ? "page" : "false");
   $("nav-approvals").setAttribute("aria-current", view === "approvals" ? "page" : "false");
+  $("nav-memory").setAttribute("aria-current", view === "memory" ? "page" : "false");
 }
 
 function route() {
@@ -162,6 +163,10 @@ function route() {
   } else if (hash === "#/approvals") {
     showView("approvals");
     loadApprovals();
+    loadSessions();
+  } else if (hash === "#/memory") {
+    showView("memory");
+    loadMemory();
     loadSessions();
   } else if (S.view !== "sessions" || S.current) {
     showNewTask();
@@ -234,6 +239,7 @@ async function submitComposer(event) {
           context_strategy: $("opt-context").value,
           workspace: $("opt-workspace").value.trim() || undefined,
           connectors: checkedServices("opt-services"),
+          memory: $("opt-memory").checked,
         },
       });
       $("composer-text").value = "";
@@ -365,6 +371,7 @@ const HANDLERS = {
     }
     if (d.parent && d.parent.kind === "routine") facts.append(fact("Started by", `routine ${d.parent.routine}`));
     if ((cfg.connectors || []).length) facts.append(fact("Services", cfg.connectors.join(", ")));
+    if (cfg.memory) facts.append(fact("Memory", "on"));
   },
 
   user_message(ev, d) {
@@ -719,6 +726,7 @@ function editRoutine(spec) {
   $("r-watch").value = watch ? watch.path : "";
   $("r-webhook").checked = spec.triggers.some((t) => t.kind === "webhook");
   setServices("r-services", (spec.config || {}).connectors || []);
+  $("r-memory").checked = Boolean((spec.config || {}).memory);
   $("routine-cancel").hidden = false;
   setWhenFields();
   $("r-task").focus();
@@ -742,7 +750,8 @@ async function saveRoutine(event) {
     triggers,
     workspace: $("r-workspace").value.trim() || null,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    config: { approval: $("r-approval").value, ...(checkedServices("r-services").length ? { connectors: checkedServices("r-services") } : {}) },
+    config: { approval: $("r-approval").value, memory: $("r-memory").checked,
+      ...(checkedServices("r-services").length ? { connectors: checkedServices("r-services") } : {}) },
     approval_ttl_s: Math.max(1, Number($("r-ttl").value)) * 60,
   };
   try {
@@ -753,6 +762,45 @@ async function saveRoutine(event) {
   } catch (err) {
     $("routine-hint").textContent = err.message;
   }
+}
+
+// ------------------------------------------------------------------- memory
+async function loadMemory() {
+  const list = $("memory-list");
+  let items;
+  try {
+    items = await api("/api/memory");
+  } catch (err) {
+    list.replaceChildren(el("li", { class: "empty-line", text: err.message }));
+    return;
+  }
+  $("memory-form").hidden = S.readOnly;
+  list.replaceChildren(...items.map((m) => {
+    const source = m.source || {};
+    const origin = source.session_id
+      ? el("a", { href: `#/s/${source.session_id}`, text: `saved by the agent in ${source.session_id}` })
+      : el("span", { text: "added by you" });
+    const act = (path, method) => async () => {
+      await api(`/api/memory/${m.id}${path}`, { method, body: method === "POST" ? {} : undefined }).catch(() => {});
+      loadMemory();
+    };
+    return el("li", {},
+      el("p", { class: "text", text: m.text }),
+      el("div", { class: "meta" }, origin, el("span", { text: when(m.created_at) }),
+        m.unreviewed ? el("span", { class: "unreviewed", text: "Unreviewed: saved after reading untrusted content" }) : null,
+        S.readOnly || !m.unreviewed ? null : el("button", { class: "btn-link", type: "button", text: "Keep", onclick: act("/review", "POST") }),
+        S.readOnly ? null : el("button", { class: "btn-link", type: "button", text: "Forget", onclick: act("", "DELETE") })));
+  }));
+  if (!items.length) list.append(el("li", { class: "empty-line", text: "Nothing remembered yet." }));
+}
+
+async function addMemory(event) {
+  event.preventDefault();
+  const text = $("memory-text").value.trim();
+  if (!text) return;
+  await api("/api/memory", { method: "POST", body: { text } }).catch(() => {});
+  $("memory-text").value = "";
+  loadMemory();
 }
 
 // ----------------------------------------------------------------- services
@@ -832,6 +880,7 @@ async function loadRules() {
 
 // ---------------------------------------------------------------------- boot
 $("routine-form").addEventListener("submit", saveRoutine);
+$("memory-form").addEventListener("submit", addMemory);
 $("routine-cancel").addEventListener("click", resetRoutineForm);
 $("r-when").addEventListener("change", setWhenFields);
 $("r-approval").addEventListener("change", setWhenFields);
@@ -863,7 +912,7 @@ $("resume").addEventListener("click", async () => {
   }
   await loadSessions();
   setWhenFields();
-  if (location.hash.startsWith("#/s/") || location.hash === "#/routines" || location.hash === "#/approvals") route();
+  if (location.hash.startsWith("#/s/") || ["#/routines", "#/approvals", "#/memory"].includes(location.hash)) route();
   else showNewTask();
   refreshApprovalCount();
   setInterval(refreshApprovalCount, 10000);

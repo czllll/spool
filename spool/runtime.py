@@ -30,6 +30,8 @@ from . import events as ev
 from . import policy
 from .config import AgentConfig
 from .connectors import ConnectorManager, session_registry
+from .memory import MemoryBook
+from .memory import snapshot as memory_snapshot
 from .rules import RuleBook
 from .context import CHARS_PER_TOKEN, estimate_tokens, plan_compaction, plan_fold, render, summary_request
 from .decide import (
@@ -150,6 +152,7 @@ class Runtime:
         self.on_event = on_event
         self.connectors = connectors
         self.rulebook = RuleBook(store)
+        self.memory = MemoryBook(store)
         self._handles: dict[str, _Handle] = {}
 
     # ---------------------------------------------------------------- sessions
@@ -332,6 +335,8 @@ class Runtime:
         cfg = h.state.config
         if cfg.connectors and not h.state.connectors_loaded:
             await self._load_connectors(h)
+        if cfg.memory and not h.state.memory_loaded:
+            h.append(ev.NOTE, memory_snapshot(self.memory, h.state.task, cfg.memory_budget_chars))
         schemas = self._registry(h).schemas()
         rendered_at = self.clock()
         request = render(h.events, h.state, schemas, now=rendered_at)
@@ -433,6 +438,8 @@ class Runtime:
             history=h.completed,
             now=self.clock,
             spawn=(lambda task, steps: self._spawn(h, call, task, steps)) if h.state.depth == 0 else None,
+            memory=self.memory if cfg.memory else None,
+            taint=h.state.taint,
         )
         started = time.perf_counter()
         try:

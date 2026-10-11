@@ -16,6 +16,7 @@
     spool web [--port 8765] [--model local]     local web app: start tasks, watch them live, approve, branch
     spool connectors [NAME...]      the configured MCP connectors' tools and the policy for each
     spool rules [add allow|ask|deny TOOL [--arg k=GLOB] | rm ID]   standing approval rules
+    spool memory [add TEXT | review ID | forget ID]                 what the agent remembers across sessions
     (global: --connectors FILE; per session: --connector NAME)
 """
 
@@ -63,6 +64,8 @@ def explicit_overrides(args: argparse.Namespace) -> dict[str, Any]:
         changes["tools"] = tuple(t.strip() for t in args.tools.split(",") if t.strip())
     if getattr(args, "connector", None):
         changes["connectors"] = tuple(dict.fromkeys(args.connector))
+    if getattr(args, "memory", False):
+        changes["memory"] = True
     return changes
 
 
@@ -240,6 +243,31 @@ def cmd_rules(args) -> int:
             if not rules:
                 print("no standing rules; steps ask as the policy says")
     except (RuleError, KeyError, ValueError) as exc:
+        raise SystemExit(str(exc).strip("'\""))
+    return 0
+
+
+def cmd_memory(args) -> int:
+    from .memory import MemoryBook
+
+    book = MemoryBook(_store(args))
+    try:
+        if args.memory_command == "add":
+            memory, _ = book.save(args.text, source={"by": "user"}, reviewed=True)
+            print(f"remembered {memory.id}")
+        elif args.memory_command == "review":
+            book.review(args.id)
+        elif args.memory_command == "forget":
+            book.forget(args.id)
+        else:
+            items = book.all()
+            for m in items:
+                origin = f"from {m.source['session_id']}" if m.source.get("session_id") else "added by you"
+                flag = "  UNREVIEWED (written after reading untrusted content)" if m.carries else ""
+                print(f"{m.id}  {m.text}  ({origin}){flag}")
+            if not items:
+                print("nothing remembered yet")
+    except (KeyError, ValueError) as exc:
         raise SystemExit(str(exc).strip("'\""))
     return 0
 
@@ -539,6 +567,7 @@ def _add_config_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--max-steps", dest="max_steps", type=int)
     p.add_argument("--tools", help="comma-separated tool allow-list")
     p.add_argument("--connector", action="append", metavar="NAME", help="give the session a connector's tools (repeatable)")
+    p.add_argument("--memory", action="store_true", help="give the session cross-session memory")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -576,6 +605,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--always", action="store_true", help="also allow this tool from now on (confirmations only)")
     p.add_argument("--note")
     p.set_defaults(func=cmd_approve)
+
+    p = sub.add_parser("memory", help="what the agent remembers across sessions")
+    msub = p.add_subparsers(dest="memory_command")
+    r = msub.add_parser("add")
+    r.add_argument("text")
+    for name in ("review", "forget"):
+        r = msub.add_parser(name)
+        r.add_argument("id")
+    msub.add_parser("list")
+    p.set_defaults(func=cmd_memory)
 
     p = sub.add_parser("rules", help="standing approval rules: always allow, always ask, never")
     rsub = p.add_subparsers(dest="rules_command")

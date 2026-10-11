@@ -66,7 +66,14 @@ RULE_REMOVED = "rule_removed"
 POLICY_TYPES = frozenset({RULE_ADDED, RULE_REMOVED})
 POLICY_STREAM_PREFIX = "policy:"
 
-ALL_TYPES = SESSION_TYPES | ROUTINE_TYPES | POLICY_TYPES
+# Memory (stream `memory:user`, see spool.memory)
+MEMORY_SAVED = "memory_saved"
+MEMORY_REVIEWED = "memory_reviewed"
+MEMORY_FORGOTTEN = "memory_forgotten"
+MEMORY_TYPES = frozenset({MEMORY_SAVED, MEMORY_REVIEWED, MEMORY_FORGOTTEN})
+MEMORY_STREAM_PREFIX = "memory:"
+
+ALL_TYPES = SESSION_TYPES | ROUTINE_TYPES | POLICY_TYPES | MEMORY_TYPES
 
 
 @dataclass(frozen=True)

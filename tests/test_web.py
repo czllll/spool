@@ -256,3 +256,23 @@ def test_always_allow_is_refused_for_rule_of_two_asks(app_and_client, tmp_path):
         wait_for(client, sid, lambda s: s["awaiting"] == "c2" and not s["running"])
         refused = client.post(f"/api/sessions/{sid}/approvals", json={"call_id": "c2", "approved": True, "always": True})
         assert refused.status_code == 400 and client.get("/api/rules").json() == []
+
+
+def test_memory_api_and_sessions_with_memory(app_and_client, tmp_path):
+    with app_and_client([reply("I know Amy is your landlord.")]) as client:
+        added = client.post("/api/memory", json={"text": "Amy Chen is my landlord."})
+        assert added.status_code == 201 and added.json()["reviewed"] and not added.json()["unreviewed"]
+        assert client.post("/api/memory", json={"text": "  "}).status_code == 400
+        sid = client.post("/api/sessions", json={"task": "who is Amy?", "memory": True,
+                                                 "workspace": str(tmp_path / "w")}).json()["id"]
+        done = wait_for(client, sid, lambda s: s["status"] == "finished" and not s["running"])
+        assert done["config"]["memory"] is True
+        events = sse_events(client.get(f"/api/sessions/{sid}/events?follow=0").text)
+        notes = [json.loads(e["data"]) for e in events if e.get("event") == "event"]
+        memory_note = next(n["data"] for n in notes if n["type"] == "note" and n["data"].get("kind") == "memory")
+        assert memory_note["items"][0]["text"] == "Amy Chen is my landlord."
+        mid = added.json()["id"]
+        assert client.post(f"/api/memory/{mid}/review").json() == {"review": mid}
+        assert client.delete(f"/api/memory/{mid}").json() == {"forget": mid}
+        assert client.get("/api/memory").json() == []
+        assert client.delete(f"/api/memory/{mid}").status_code == 404

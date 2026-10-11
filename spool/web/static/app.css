@@ -252,6 +252,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .approval-item .from a { color: var(--accent); }
 .approval-item .expiry { color: var(--amber); }
 .approval-item .actions { display: flex; gap: 0.5rem; }
+.memory-form { display: flex; gap: 0.5rem; max-width: 46rem; margin-bottom: 1rem; }
+.memory-form input { flex: 1; background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: 0.35rem 0.55rem; }
+.memory-list { list-style: none; margin: 0; padding: 0; max-width: 46rem; }
+.memory-list li { padding: 0.55rem 0; border-bottom: 1px solid var(--rule-soft); }
+.memory-list .text { margin: 0 0 0.2rem; }
+.memory-list .meta { display: flex; gap: 1rem; flex-wrap: wrap; align-items: baseline; font-size: 0.85rem; color: var(--muted); }
+.memory-list .meta a { color: var(--accent); }
+.memory-list .unreviewed { color: var(--amber); }
+.composer-options .check, .form-row .check { flex-direction: row; align-items: center; gap: 0.4rem; align-self: flex-end; color: var(--ink); }
 .rules { max-width: 46rem; margin-top: 1.8rem; border-top: 1px solid var(--rule); padding-top: 1rem; }
 .rules h3 { margin: 0 0 0.3rem; font-size: 1.1rem; font-weight: 600; }
 .rules .hint { margin: 0 0 0.6rem; font-size: 0.85rem; color: var(--muted); }

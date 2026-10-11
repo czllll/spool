@@ -44,6 +44,8 @@ class ToolContext:
     history: Callable[[str], Mapping[str, Any] | None]
     now: Callable[[], float]
     spawn: Callable[[str, int], Awaitable[dict[str, Any]]] | None = None
+    memory: Any = None                       # MemoryBook, when the session has memory
+    taint: frozenset[str] = frozenset()      # the session's taint when the call started
 
 
 Handler = Callable[[ToolContext, dict[str, Any]], Awaitable[ToolResult]]

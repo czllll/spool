@@ -243,6 +243,31 @@ async def spawn_subagent(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
     return ToolResult(ok=True, output=header + "\nResult:\n" + truncate_middle(answer, 6000), data=data)
 
 
+# -------------------------------------------------------------------- memory
+async def remember(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    if ctx.memory is None:
+        return ToolResult.fail("memory is not enabled for this session")
+    memory, duplicate = ctx.memory.save(args["text"], source={"session_id": ctx.session_id, "call_id": ctx.call_id},
+                                        taint=ctx.taint, key=ctx.idem_key)
+    note = (" It is marked unreviewed, because this session has read untrusted content; the user can review it."
+            if memory.carries else "")
+    return ToolResult(ok=True, output=f"Remembered [{memory.id}]: {memory.text}{note}",
+                      data={"meta": {"memory_id": memory.id, "deduplicated": duplicate}})
+
+
+async def search_memory(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    from ..memory import rank
+
+    if ctx.memory is None:
+        return ToolResult.fail("memory is not enabled for this session")
+    hits = [m for score, m in rank(ctx.memory.all(), args["query"]) if score > 0][:5]
+    if not hits:
+        return ToolResult(ok=True, output="Nothing in memory matches.")
+    lines = [f"[{m.id}] {m.text}" + ("" if not m.carries else "  (unreviewed)") for m in hits]
+    # Unreviewed memory came from untrusted content: reading it taints this session too.
+    return ToolResult(ok=True, output="\n".join(lines), data={"taint": sorted({t for m in hits for t in m.carries})})
+
+
 def _obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
     return {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
 
@@ -373,6 +398,24 @@ BUILTIN_SPECS: list[ToolSpec] = [
             "max_steps": {"type": "integer", "description": "Step budget for the sub-agent."},
         }, ["task"]),
         handler=spawn_subagent,
+    ),
+]
+
+MEMORY_SPECS: list[ToolSpec] = [
+    ToolSpec(
+        name="remember",
+        description=("Save a lasting fact or preference about the user for future sessions, e.g. who someone is or "
+                     "how they like things done. One fact per call, in a full sentence."),
+        parameters=_obj({"text": {"type": "string"}}, ["text"]),
+        handler=remember,
+        idempotent=False,
+        ledgered=True,  # keyed by the call: a repeat after a crash returns the same memory
+    ),
+    ToolSpec(
+        name="search_memory",
+        description="Look up what you remember about the user beyond what is shown in your instructions.",
+        parameters=_obj({"query": {"type": "string"}}, ["query"]),
+        handler=search_memory,
     ),
 ]
 

@@ -20,6 +20,7 @@
         <a href="#/" id="nav-sessions">Sessions</a>
         <a href="#/routines" id="nav-routines">Routines</a>
         <a href="#/approvals" id="nav-approvals">Approvals <span class="count" id="approval-count" hidden></span></a>
+        <a href="#/memory" id="nav-memory">Memory</a>
       </nav>
       <ul class="session-list" id="session-list"></ul>
     </aside>
@@ -83,6 +84,7 @@
           </div>
           <div class="form-row">
             <fieldset class="services" id="r-services" hidden><legend>Services it can use</legend></fieldset>
+            <label class="check"><input id="r-memory" type="checkbox" checked> Remember things across runs</label>
           </div>
           <div class="form-row">
             <label>Steps that need approval
@@ -119,6 +121,21 @@
         </section>
       </section>
 
+      <section class="page" id="page-memory" hidden aria-labelledby="memory-title">
+        <header class="page-head">
+          <h2 id="memory-title">Memory</h2>
+          <p>Facts the agent keeps between tasks. Each one shows where it came from. Something the agent saved after
+            reading untrusted content (an email, a web page) stays unreviewed until you keep it: until then, any
+            task that sees it is treated as having read untrusted content too.</p>
+        </header>
+        <form class="memory-form" id="memory-form" autocomplete="off">
+          <label class="visually-hidden" for="memory-text">New fact</label>
+          <input id="memory-text" type="text" placeholder="Add a fact, e.g. Amy Chen (amy.chen@example.com) is my landlord.">
+          <button class="btn btn-primary" type="submit">Add</button>
+        </form>
+        <ul class="memory-list" id="memory-list"></ul>
+      </section>
+
       <form class="composer" id="composer" autocomplete="off">
         <label class="visually-hidden" for="composer-text">Task or message</label>
         <textarea id="composer-text" rows="3" placeholder="Describe a task, e.g. The tests in test_stats.py fail. Fix stats.py so they pass."></textarea>
@@ -142,6 +159,7 @@
             <input id="opt-workspace" type="text" placeholder="Optional; a new empty folder is used otherwise">
           </label>
           <fieldset class="services" id="opt-services" hidden><legend>Services it can use</legend></fieldset>
+          <label class="check"><input id="opt-memory" type="checkbox" checked> Remember things across tasks</label>
         </div>
         <div class="composer-actions">
           <span class="composer-hint" id="composer-hint"></span>
