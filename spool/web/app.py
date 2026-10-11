@@ -27,7 +27,7 @@ from typing import Any, AsyncIterator
 
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
@@ -38,7 +38,7 @@ from ..routines import RoutineError, RoutineSpec, Scheduler, summarize_routine
 from ..runtime import ApprovalExpired, Runtime
 from ..state import replay
 from ..tools import PathError, relative_parts, resolve_path
-from ..util import truncate_middle
+from ..util import digest, truncate_middle
 
 STATIC = Path(__file__).resolve().parent / "static"
 MAX_EVENT_OUTPUT = 20_000
@@ -228,8 +228,14 @@ def create_app(runtime: Runtime, *, default_config: AgentConfig | None = None, r
                 scheduler_state["error"] = f"{type(exc).__name__}: {exc}"
             await asyncio.sleep(tick_s or 10.0)
 
+    # Asset URLs carry a content hash, so a browser never runs a stale app.js against a newer server.
+    version = digest({f.name: f.read_bytes().hex() for f in sorted(STATIC.iterdir()) if f.is_file()}, 12)
+    page = (STATIC / "index.html").read_text(encoding="utf-8")
+    page = page.replace('/static/app.css"', f'/static/app.css?v={version}"').replace(
+        '/static/app.js"', f'/static/app.js?v={version}"')
+
     async def index(request: Request) -> Response:
-        return FileResponse(STATIC / "index.html")
+        return HTMLResponse(page)
 
     async def server_config(request: Request) -> Response:
         return JSONResponse({"read_only": read_only, "model": base_config.model,

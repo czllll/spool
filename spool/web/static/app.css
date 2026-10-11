@@ -81,6 +81,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn-link { border: 0; background: none; padding: 0; color: var(--muted); font-size: 0.85rem; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .btn-link:hover { color: var(--ink); }
 
+.app.wide { grid-template-columns: 15.5rem minmax(0, 1fr); }
+.app.wide .inspector { display: none; }
+
 /* ------------------------------------------------------------------- rail */
 .rail { border-right: 1px solid var(--rule); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
 .rail-head { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1rem 0.75rem; }
@@ -99,7 +102,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .session-item .s.failed { color: var(--red); }
 
 .rail-nav { display: flex; gap: 0.9rem; padding: 0 1rem 0.6rem; border-bottom: 1px solid var(--rule-soft); margin-bottom: 0.4rem; font-size: 0.9rem; }
-.rail-nav a { color: var(--muted); text-decoration: none; padding-bottom: 0.15rem; }
+.rail-nav a { color: var(--muted); text-decoration: none; padding-bottom: 0.15rem; white-space: nowrap; }
 .rail-nav a:hover { color: var(--ink); }
 .rail-nav a[aria-current="page"] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
 .rail-nav .count { font: 0.72rem var(--mono); background: var(--amber); color: var(--paper); border-radius: 999px; padding: 0 0.4rem; margin-left: 0.15rem; }
@@ -300,11 +303,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ------------------------------------------------------------- narrow */
 @media (max-width: 1100px) {
-  .app { grid-template-columns: 13rem minmax(0, 1fr); }
+  .app, .app.wide { grid-template-columns: 13rem minmax(0, 1fr); }
   .inspector { display: none; }
 }
 @media (max-width: 720px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .app, .app.wide { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
   .rail { border-right: 0; border-bottom: 1px solid var(--rule); max-height: 30vh; }
   .entry { grid-template-columns: 2.6rem minmax(0, 1fr); column-gap: 0.7rem; padding-right: 1rem; }
   .ledger-head, .composer, .intro, .page { padding-left: 1rem; padding-right: 1rem; }

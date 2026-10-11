@@ -98,13 +98,14 @@ function lineCount(text) {
   return `${n} line${n === 1 ? "" : "s"}`;
 }
 
+// The interface is written in English, so dates are too (in the browser's time zone).
 function when(ts) {
   if (!ts) return "";
-  return new Date(ts * 1000).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return new Date(ts * 1000).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 function clockTime(ts) {
-  return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(ts * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
 // Why a step needs approval, for a person (the policy's own reason is written for the model).
@@ -130,6 +131,7 @@ const PAGES = { routines: "page-routines", approvals: "page-approvals" };
 function showView(view) {
   S.view = view;
   const sessions = view === "sessions";
+  document.querySelector(".app").classList.toggle("wide", !sessions);  // no inspector outside sessions
   for (const [name, id] of Object.entries(PAGES)) $(id).hidden = name !== view;
   $("composer").hidden = !sessions || S.readOnly;
   $("entries").hidden = !sessions;
@@ -168,9 +170,11 @@ async function refreshApprovalCount() {
   try {
     const items = await api("/api/approvals");
     const badge = $("approval-count");
+    const changed = badge.textContent !== String(items.length);
     badge.hidden = items.length === 0;
     badge.textContent = String(items.length);
     if (S.view === "approvals") renderApprovals(items);
+    if (changed) loadSessions();  // the rail shows which sessions are waiting
   } catch (_) { /* next poll */ }
 }
 
@@ -348,7 +352,8 @@ const HANDLERS = {
     facts.replaceChildren(
       fact("Model", cfg.model),
       fact("Sandbox", cfg.sandbox),
-      fact("Approvals", APPROVAL_LABELS[cfg.approval] || cfg.approval),
+      fact("Approvals", (APPROVAL_LABELS[cfg.approval] || cfg.approval)
+        + (cfg.approval === "human" && cfg.approval_ttl_s ? `, skipped after ${Math.round(cfg.approval_ttl_s / 60)} min` : "")),
       fact("Context", CONTEXT_LABELS[cfg.context_strategy] || cfg.context_strategy),
       fact("Folder", d.workspace),
     );
@@ -442,6 +447,7 @@ const HANDLERS = {
     const text = d.by === "expired" ? "Nobody answered in time, so this step did not run."
       : `${who} ${d.approved ? "allowed" : "denied"} this step.`;
     call.approval.replaceChildren(el("p", { text }));
+    call.expired = d.by === "expired";
     refreshApprovalCount();
     call.root.className = "call";
     call.state.textContent = d.approved ? "allowed" : "denied";
@@ -459,8 +465,13 @@ const HANDLERS = {
     call.root.className = `call ${kind}`;
     const labels = { ok: "done", error: "failed", denied: "blocked", rejected: "denied", invalid: "invalid call",
       interrupted: "interrupted", deduplicated: "done (already sent)" };
-    call.state.textContent = d.kind === "deduplicated" ? labels.deduplicated : (labels[kind] || kind);
-    if (!d.ok && d.error && d.kind !== "denied") call.notes.append(el("p", { class: "note-line red", text: d.error }));
+    call.state.textContent = d.kind === "deduplicated" ? labels.deduplicated
+      : call.expired ? "skipped, no answer" : (labels[kind] || kind);
+    // Denials and rejections are explained by the policy note or the approval box; their error
+    // text is the instruction written for the model.
+    if (!d.ok && d.error && d.kind !== "denied" && d.kind !== "rejected") {
+      call.notes.append(el("p", { class: "note-line red", text: d.error }));
+    }
     const output = d.offloaded_path ? d.preview : d.output;
     if (output) {
       call.result.append(el("details", {}, el("summary", { text: `Output, ${lineCount(d.output)}` }),
